@@ -1,0 +1,165 @@
+{
+  "EnableNuiCommand": false,
+  "npcBlips": false,
+  "encounters": [
+    {
+      "id": "cleanup_beach",
+      "label": "Beach Cleanup",
+      "description": "Some dirty bastard has chucked about a load of bin bags around the beach! Can you help me clear them up?",
+      "type": "cleanup",
+      "cooldownSeconds": 10,
+      "npc": {
+        "id": "beach_keeper",
+        "model": "S_F_Y_Baywatch_01",
+        "coords": { "x": -1605.68, "y": -1111.22, "z": 2.32, "w": 130.0 },
+        "scenario": "WORLD_HUMAN_CLIPBOARD",
+        "target": { "icon": "fa-solid fa-recycle", "label": "Help Stranger" },
+        "blip": { "sprite": 317, "color": 3, "scale": 0.7 },
+        "speech": "GENERIC_HOWS_IT_GOING",
+        "speechClaim": "GENERIC_THANKS",
+        "speechBye": "GENERIC_BYE"
+      },
+      "params": {
+        "area": { "x": -1465.317, "y": -1204.206, "z": 2.921 },
+        "radius": 50,
+        "props": ["prop_rub_binbag_01", "prop_ld_rub_binbag_01"],
+        "count": 5,
+        "preventWater": false,
+        "preventUnderground": true,
+        "spawnMode": "random",
+        "itemLabel": "trash bag"
+      },
+      "messages": {
+        "pickup": "You picked up a trash bag."
+      },
+      "reward": {
+        "cash": 2500,
+        "items": [
+          { "name": "water", "count": 2 }
+        ]
+      }
+    },
+    {
+      "id": "delivery_quickdrop",
+      "label": "Express Delivery",
+      "description": "Deliver this package across town before the timer runs out.",
+      "type": "delivery",
+      "cooldownSeconds": 10,
+      "npc": {
+        "id": "courier_bob",
+        "model": "s_m_m_postal_01",
+        "coords": { "x": 84.57, "y": 110.16, "z": 78.15, "w": 83.6 },
+        "scenario": "WORLD_HUMAN_CLIPBOARD",
+        "target": { "icon": "fa-solid fa-box", "label": "Talk: Express Delivery" },
+        "blip": { "sprite": 501, "color": 5, "scale": 0.7 },
+        "speechClaim": "GENERIC_THANKS",
+        "speechBye": "GENERIC_BYE"
+      },
+      "params": {
+        "destination": { "x": -537.46, "y": -216.97, "z": 37.65 },
+        "timeSeconds": 90,
+        "animation": {
+          "Animation": "idle",
+          "Dictionary": "anim@heists@box_carry@",
+          "Options": {
+            "Flags": {
+              "Loop": true,
+              "Move": true
+            },
+            "Props": [
+              {
+                "Bone": 60309,
+                "Name": "hei_prop_heist_box",
+                "Placement": [
+                  { "x": 0.025, "y": 0.08, "z": 0.255 },
+                  { "x": -145.0, "y": 290.0, "z": 0.0 }
+                ]
+              }
+            ]
+          }
+        }
+      },
+      "reward": {
+        "cash": 1500,
+        "items": []
+      }
+    },
+    {
+      "id": "assassination_parksuspect",
+      "label": "Park Pervert",
+      "description": "There's some pervert lurking in the park, his name is James Day, If you deal with him I'll make it worth your while.",
+      "type": "assassination",
+      "cooldownSeconds": 1000,
+      "npc": {
+        "id": "fixer_joe",
+        "model": "s_m_y_dealer_01",
+        "coords": { "x": -1082.93, "y": -1674.28, "z": 3.70, "w": 0 },
+        "target": { "icon": "fa-solid fa-skull", "label": "Help Stranger" },
+        "blip": { "sprite": 303, "color": 1, "scale": 0.7 },
+        "speechClaim": "GENERIC_THANKS",
+        "speechBye": "GENERIC_BYE"
+      },
+      "params": {
+        "area": { "x": 202.02, "y": -932.53, "z": 30.69 },
+        "radius": 15,
+        "targets": [
+          {
+            "model": "a_m_y_acult_01",
+            "spawn": { "x": 202.02, "y": -932.53, "z": 30.69 },
+            "heading": 0.0
+          }
+        ],
+        "blip": true
+      },
+      "reward": { "cash": 3000, "items": [] }
+    },
+    {
+      "id": "assassination_gang_melee",
+      "label": "Ambush the Ambushers",
+      "description": "Some biker freaks are planning to ambush a shipment we've got coming into the docks. Fuck 'em up!",
+      "type": "assassination",
+      "cooldownSeconds": 10,
+      "npc": {
+        "id": "gang_informant",
+        "model": "g_m_y_ballaeast_01",
+        "coords": { "x": 118.33, "y": -1928.17, "z": 19.71, "w": 149.7 },
+        "scenario": "WORLD_HUMAN_SMOKING",
+        "target": { "icon": "fa-solid fa-user-slash", "label": "Help Stranger" },
+        "blip": { "sprite": 303, "color": 6, "scale": 0.7 },
+        "speech": "GENERIC_CHEER",
+        "speechClaim": "GENERIC_CHEER",
+        "speechBye": "GENERIC_BYE"
+      },
+      "params": {
+        "area": { "x": 1205.0, "y": -3115.0, "z": 5.54 },
+        "radius": 100,
+        "targets": [
+          {
+            "model": "g_m_y_lost_01",
+            "spawn": { "x": 1205.67, "y": -3116.23, "z": 5.54 },
+            "weapon": "WEAPON_BAT",
+            "heading": 85.0
+          },
+          {
+            "model": "g_m_y_lost_02", 
+            "spawn": { "x": 1208.42, "y": -3113.78, "z": 5.54 },
+            "heading": 200.0
+          },
+          {
+            "model": "g_m_y_lost_03",
+            "spawn": { "x": 1202.15, "y": -3119.94, "z": 5.54 },
+            "weapon": "WEAPON_MACHETE",
+            "heading": 15.0
+          }
+        ],
+        "blip": true
+      },
+      "reward": { 
+        "cash": 7500, 
+        "items": [
+          { "name": "bandage", "count": 3 }
+        ]
+      }
+    }
+  ]
+}
