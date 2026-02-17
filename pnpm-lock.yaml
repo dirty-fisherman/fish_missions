@@ -28,8 +28,8 @@ importers:
         version: 5.0.8(@types/react@18.3.18)(react@18.3.1)
     devDependencies:
       '@citizenfx/client':
-        specifier: latest
-        version: 2.0.13139-1
+        specifier: ^2.0.25924-1
+        version: 2.0.25924-1
       '@citizenfx/server':
         specifier: latest
         version: 2.0.13139-1
@@ -199,8 +199,8 @@ packages:
     cpu: [x64]
     os: [win32]
 
-  '@citizenfx/client@2.0.13139-1':
-    resolution: {integrity: sha512-W6X1aeEWAilMqM0iqfZJLLKDWYSRilzh7+BhvvvjUp//3yUjour/zydD6flcv9ShzlOk9cwNKlFyu0p33g/NAQ==}
+  '@citizenfx/client@2.0.25924-1':
+    resolution: {integrity: sha512-I5dWuSUssR3wcE2FinWoHq9HqwzK/9yWA89g16LM/dNJt2OCCePwm1ERubwAodkSMmsAWqpD/2Vqt07aZQHXGQ==}
 
   '@citizenfx/server@2.0.13139-1':
     resolution: {integrity: sha512-CJ4DhL5Cnh+W+aGrJzM7PijwqJ2/aWC+JFI69alcqcQRRaRYNXnewfD4L6pAOGtInrOoeVilhUO6FnAHZJQY5A==}
@@ -1292,7 +1292,7 @@ snapshots:
   '@biomejs/cli-win32-x64@1.9.4':
     optional: true
 
-  '@citizenfx/client@2.0.13139-1': {}
+  '@citizenfx/client@2.0.25924-1': {}
 
   '@citizenfx/server@2.0.13139-1': {}
 
