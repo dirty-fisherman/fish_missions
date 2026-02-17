@@ -21,7 +21,7 @@
 	},
 	"bugs": "https://github.com/communityox/fivem-typescript-boilerplate/issues",
 	"devDependencies": {
-		"@citizenfx/client": "latest",
+		"@citizenfx/client": "^2.0.25924-1",
 		"@citizenfx/server": "latest",
 		"@communityox/fx-utils": "^0.0.4",
 		"@jgoz/esbuild-plugin-typecheck": "^4.0.3",
