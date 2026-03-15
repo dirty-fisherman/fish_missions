@@ -144,14 +144,14 @@ export const debugMissionData = () => {
     }
   ], 1000);
 
-  // Simulate an NPC encounter after 3 seconds
+  // Simulate an NPC mission after 3 seconds
   setTimeout(() => {
     debugData([
       {
-        action: 'encounter:show',
+        action: 'mission:show',
         data: {
           npc: sampleNpcs[1], // courier_bob
-          encounter: sampleMissions[1] // delivery_quickdrop
+          mission: sampleMissions[1] // delivery_quickdrop
         }
       }
     ], 100);

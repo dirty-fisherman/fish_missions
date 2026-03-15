@@ -23,31 +23,37 @@ export function getMissionWaypoint(mission: any): { x: number; y: number; z?: nu
   
   switch (mission.type) {
     case 'cleanup':
-      if (mission.params?.area) {
-        return {
-          x: mission.params.area.x,
-          y: mission.params.area.y,
-          z: mission.params.area.z || 0
-        };
+      if (mission.params?.props?.length) {
+        const props = mission.params.props;
+        let cx = 0, cy = 0, cz = 0;
+        for (const p of props) {
+          cx += p.coords.x ?? p.coords[1] ?? 0;
+          cy += p.coords.y ?? p.coords[2] ?? 0;
+          cz += p.coords.z ?? p.coords[3] ?? 0;
+        }
+        return { x: cx / props.length, y: cy / props.length, z: cz / props.length };
       }
       break;
     case 'delivery':
       if (mission.params?.destination) {
+        const d = mission.params.destination;
         return {
-          x: mission.params.destination.x,
-          y: mission.params.destination.y,
-          z: mission.params.destination.z || 0
+          x: d.x ?? d[1] ?? 0,
+          y: d.y ?? d[2] ?? 0,
+          z: d.z ?? d[3] ?? 0,
         };
       }
       break;
     case 'assassination':
-      if (mission.params?.area) {
-        // Use defined area center as waypoint
-        return {
-          x: mission.params.area.x,
-          y: mission.params.area.y,
-          z: mission.params.area.z || 0
-        };
+      if (mission.params?.targets?.length) {
+        const targets = mission.params.targets;
+        let cx = 0, cy = 0, cz = 0;
+        for (const t of targets) {
+          cx += t.coords.x ?? t.coords[1] ?? 0;
+          cy += t.coords.y ?? t.coords[2] ?? 0;
+          cz += t.coords.z ?? t.coords[3] ?? 0;
+        }
+        return { x: cx / targets.length, y: cy / targets.length, z: cz / targets.length };
       }
       break;
   }

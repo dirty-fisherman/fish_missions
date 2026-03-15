@@ -5,7 +5,7 @@ import { useMissionStore } from '../stores/missionStore';
 export function useMissionEvents(onClose: () => void) {
   const {
     setPanelVisible,
-    showEncounter,
+    showMission,
     setDiscoveredMissions,
     setMissionStatuses,
     openPanel,
@@ -15,8 +15,10 @@ export function useMissionEvents(onClose: () => void) {
     setPanelVisible(!!data.visible);
   });
 
-  useNuiEvent('encounter:show', (data: { npc: any; encounter: any }) => {
-    showEncounter(data.npc, data.encounter);
+  useNuiEvent('mission:show', (data: { npc: any; mission: any }) => {
+    showMission(data.npc, data.mission);
+    // Always request fresh statuses so offering/CTAs are accurate
+    void fetchNui('tracker:request', {});
   });
 
   // Tracker events
@@ -37,11 +39,13 @@ export function useMissionEvents(onClose: () => void) {
     }
   });
   
-  useNuiEvent('tracker:data', (data: { statuses: any[], discoveredMissions?: any[] }) => {
+  useNuiEvent('tracker:data', (data: { statuses: any[], discoveredMissions?: any[], config?: { sidebarPosition?: 'left' | 'right' } }) => {
     setMissionStatuses(data.statuses || []);
-    // Update discovered missions from server instead of localStorage
     if (data.discoveredMissions) {
       setDiscoveredMissions(data.discoveredMissions);
+    }
+    if (data.config?.sidebarPosition) {
+      useMissionStore.getState().setSidebarPosition(data.config.sidebarPosition);
     }
   });
 }
