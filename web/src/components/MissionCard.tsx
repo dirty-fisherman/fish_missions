@@ -1,38 +1,65 @@
 import { useState, useEffect } from 'react';
+import { Badge, Button, Card, Group, ScrollArea, Stack, Text, Title } from '@mantine/core';
+import { IconMapPin } from './icons';
 import { fetchNui } from '../utils/fetchNui';
 import { formatTimeRemaining, getMissionWaypoint } from '../utils/missionHelpers';
 import { useMissionStore } from '../stores/missionStore';
+import { useStr } from '../utils/useStr';
+
+const statusColors: Record<string, string> = {
+  complete: 'green',
+  turnin: 'green',
+  cooldown: 'gray',
+};
+
+const statusStringKey: Record<string, string> = {
+  complete: 'status_complete',
+  turnin: 'status_complete',
+  cooldown: 'status_cooldown',
+};
 
 interface MissionCardProps {
   onClose: () => void;
 }
 
 export function MissionCard({ onClose }: MissionCardProps) {
-  const {
-    offering,
-    openedViaNpc,
-    selectedMission,
-    selectedNpc,
-    getStatusById,
-    addDiscoveredMission,
-  } = useMissionStore();
-
+  const { offering, openedViaNpc, selectedMission, selectedNpc, getStatusById, addDiscoveredMission } = useMissionStore();
   const [, forceUpdate] = useState({});
+  const emptyDetail = useStr('empty_detail');
+  const btnAccept = useStr('btn_accept');
+  const btnReject = useStr('btn_reject');
+  const btnClaim = useStr('btn_claim');
+  const btnCollect = useStr('btn_collect');
+  const btnCancel = useStr('btn_cancel');
+  const btnWaypoint = useStr('btn_waypoint');
+  const rewardsLabel = useStr('rewards_label');
+  const cooldownComeback = useStr('cooldown_comeback');
+  const currencyPrefix = useStr('currency_prefix');
+  const strStatusComplete = useStr('status_complete');
+  const strStatusCooldown = useStr('status_cooldown');
+  const statusLabels: Record<string, string> = {
+    status_complete: strStatusComplete,
+    status_cooldown: strStatusCooldown,
+  };
 
-  // Update every second for dynamic cooldown
   useEffect(() => {
-    const interval = setInterval(() => {
-      forceUpdate({});
-    }, 1000);
-
-    return () => clearInterval(interval);
+    const id = setInterval(() => forceUpdate({}), 1000);
+    return () => clearInterval(id);
   }, []);
 
   if (!selectedMission) {
     return (
-      <div className='selected-card'>
-        <div style={{ opacity: 0.65, fontSize: 13 }}>No mission selected</div>
-      </div>
+      <Card
+        bg="rgba(30, 30, 40, 0.8)"
+        radius="md"
+        p="md"
+        withBorder
+        style={{ borderColor: 'rgba(60, 60, 80, 0.5)', height: 240, flexShrink: 0 }}
+      >
+        <Stack align="center" justify="center" h="100%">
+          <Text size="sm" c="dimmed">{emptyDetail}</Text>
+        </Stack>
+      </Card>
     );
   }
 
@@ -40,136 +67,105 @@ export function MissionCard({ onClose }: MissionCardProps) {
 
   const handleAccept = () => {
     if (!selectedNpc || !selectedMission) return;
-    void fetchNui('encounter:accept', { npcId: selectedNpc.id, encounterId: selectedMission.id });
-    
-    // Mark as discovered
+    void fetchNui('mission:accept', { npcId: selectedNpc.id, missionId: selectedMission.id });
     addDiscoveredMission(selectedMission);
-    
-    // Set waypoint to mission location
-    const waypoint = getMissionWaypoint(selectedMission);
-    if (waypoint) {
-      void fetchNui('mission:waypoint', { x: waypoint.x, y: waypoint.y, z: waypoint.z });
-    }
-    
+    const wp = getMissionWaypoint(selectedMission);
+    if (wp) void fetchNui('mission:waypoint', { x: wp.x, y: wp.y, z: wp.z });
     onClose();
   };
 
   const handleReject = () => {
-    void fetchNui('encounter:reject', { npcId: selectedNpc?.id });
+    void fetchNui('mission:reject', { npcId: selectedNpc?.id });
     onClose();
   };
 
   const handleClaim = () => {
-    void fetchNui('encounter:claim', { 
-      encounterId: selectedMission.id,
-      npcId: selectedNpc?.id || '' 
-    });
+    void fetchNui('mission:claim', { missionId: selectedMission.id, npcId: selectedNpc?.id || '' });
     onClose();
   };
 
   const handleCancel = () => {
-    void fetchNui('encounter:cancel', { encounterId: selectedMission.id });
+    void fetchNui('mission:cancel', { missionId: selectedMission.id });
     onClose();
   };
 
   const handleWaypoint = () => {
-    void fetchNui('encounter:waypoint', { encounterId: selectedMission.id });
+    void fetchNui('mission:waypoint', { missionId: selectedMission.id });
     onClose();
   };
 
+  // Compute effective cooldown remaining dynamically
+  const computeCooldownRemaining = () => {
+    if (!status?.cooldownRemaining) return 0;
+    let remaining = status.cooldownRemaining;
+    if (status.cooldownTimestamp) {
+      const elapsed = Math.floor((Date.now() - status.cooldownTimestamp) / 1000);
+      remaining = Math.max(0, remaining - elapsed);
+    }
+    return remaining;
+  };
+
+  // Derive effective status — if cooldown has expired, treat as available
+  const cooldownRemaining = computeCooldownRemaining();
+  const effectiveStatus = (status?.status === 'cooldown' && cooldownRemaining <= 0) ? 'available' : status?.status;
+
+  // Determine if we should show accept/reject based on effective status
+  const isAtNpcForMission = openedViaNpc && selectedNpc?.missionId === selectedMission.id;
+  const shouldOffer = offering || (isAtNpcForMission && (!effectiveStatus || effectiveStatus === 'available' || effectiveStatus === 'cancelled'));
+
   const renderActions = () => {
-    const isOnCooldown = status?.status === 'cooldown' || (status?.cooldownRemaining && status.cooldownRemaining > 0);
-    
-    // Show cooldown message for any mission on cooldown (whether offering or not)
-    if (isOnCooldown) {
-      // Calculate dynamic remaining time
-      let remainingSeconds = status?.cooldownRemaining || 0;
-      
-      if (status?.cooldownTimestamp) {
-        const elapsedSinceReceived = Math.floor((Date.now() - status.cooldownTimestamp) / 1000);
-        remainingSeconds = Math.max(0, remainingSeconds - elapsedSinceReceived);
-      }
-      
+    if (effectiveStatus === 'cooldown' && cooldownRemaining > 0) {
       return (
-        <button 
-          type='button' 
-          disabled 
-          style={{ opacity: 0.6, cursor: 'not-allowed' }}
-        >
-          Come back in {formatTimeRemaining(remainingSeconds)}
-        </button>
+        <Group gap="xs" grow>
+          <Button variant="light" color="gray" disabled size="xs">
+            {cooldownComeback.replace('%s', formatTimeRemaining(cooldownRemaining))}
+          </Button>
+          <Button variant="light" color="blue" onClick={handleWaypoint} size="xs" leftSection={<IconMapPin />}>
+            {btnWaypoint}
+          </Button>
+        </Group>
       );
     }
 
-    // Show Accept/Reject only when we are looking at an NPC offer
-    if (offering) {
+    if (shouldOffer) {
       return (
-        <>
-          <button 
-            type='button' 
-            onClick={handleAccept} 
-            style={{ 
-              background: 'linear-gradient(135deg, #4CAF50, #45a049)', 
-              border: 'none',
-              color: 'white'
-            }}
-          >
-            Accept Mission
-          </button>
-          <button type='button' className='ghost' onClick={handleReject}>
-            Reject
-          </button>
-        </>
-      );
-    }
-    
-    // Claim reward when mission is complete, opened via NPC, and NPC matches mission
-    const isComplete = status?.status === 'complete';
-    const isCorrectNpc = openedViaNpc && selectedNpc?.encounterId === selectedMission.id;
-    
-    if (isComplete && isCorrectNpc) {
-      return (
-        <button
-          type='button'
-          onClick={handleClaim}
-          style={{ 
-            background: 'linear-gradient(135deg, #4CAF50, #45a049)', 
-            border: 'none',
-            color: 'white'
-          }}
-        >
-          Claim Reward
-        </button>
+        <Group gap="xs" grow>
+          <Button variant="filled" color="blue" onClick={handleAccept} size="xs">{btnAccept}</Button>
+          <Button variant="subtle" color="gray" onClick={handleReject} size="xs">{btnReject}</Button>
+        </Group>
       );
     }
 
-    // Allow cancel only when mission is in progress
-    if (status?.status === 'in-progress') {
+    if (effectiveStatus === 'complete' && isAtNpcForMission) {
+      return <Button variant="filled" color="green" onClick={handleClaim} fullWidth size="xs">{btnClaim}</Button>;
+    }
+
+    if (effectiveStatus === 'in-progress') {
       return (
-        <button
-          type='button'
-          className='ghost'
-          onClick={handleCancel}
-          title={`Cancel ${selectedMission.label}`}
-        >
-          Cancel Mission
-        </button>
+        <Group gap="xs" grow>
+          <Button variant="light" color="blue" onClick={handleWaypoint} size="xs" leftSection={<IconMapPin />}>
+            {btnWaypoint}
+          </Button>
+          <Button variant="light" color="red" onClick={handleCancel} size="xs">
+            {btnCancel}
+          </Button>
+        </Group>
       );
     }
 
-    // Waypoint CTA for available, complete, or cooldown states
-    if (status?.status === 'available' || status?.status === 'complete' || status?.status === 'cooldown') {
+    if (effectiveStatus === 'complete') {
       return (
-        <button
-          type='button'
-          onClick={handleWaypoint}
-          title="Set waypoint to NPC location"
-        >
-          <svg xmlns="http://www.w3.org/2000/svg" enableBackground="new 0 0 24 24" height="24px" viewBox="0 0 24 24" width="24px" fill="#e3e3e3">
-            <g><rect fill="none" height="24" width="24"/></g>
-            <g><path d="M12,2c-4.2,0-8,3.22-8,8.2c0,3.18,2.45,6.92,7.34,11.23c0.38,0.33,0.95,0.33,1.33,0C17.55,17.12,20,13.38,20,10.2 C20,5.22,16.2,2,12,2z M12,12c-1.1,0-2-0.9-2-2c0-1.1,0.9-2,2-2c1.1,0,2,0.9,2,2C14,11.1,13.1,12,12,12z"/></g>
-          </svg>
-        </button>
+        <Button variant="light" color="green" onClick={handleWaypoint} fullWidth size="xs" leftSection={<IconMapPin />}>
+          {btnCollect}
+        </Button>
+      );
+    }
+
+    if (effectiveStatus === 'available' || effectiveStatus === 'cancelled') {
+      return (
+        <Button variant="light" color="blue" onClick={handleWaypoint} fullWidth size="xs" leftSection={<IconMapPin />}>
+          {btnWaypoint}
+        </Button>
       );
     }
 
@@ -177,33 +173,45 @@ export function MissionCard({ onClose }: MissionCardProps) {
   };
 
   return (
-    <div className='selected-card'>
-      <div className='selected-header'>
-        <h3 className='selected-title'>{selectedMission.label}</h3>
-        {status?.status && (
-          <span className={`badge ${status.status}`}>
-            {status.status}
-          </span>
+    <Card
+      bg="rgba(30, 30, 40, 0.8)"
+      radius="md"
+      p="sm"
+      withBorder
+      style={{ borderColor: 'rgba(60, 60, 80, 0.5)', height: 240, flexShrink: 0, display: 'flex', flexDirection: 'column' }}
+    >
+      {/* Header — fixed */}
+      <Group justify="space-between" align="flex-start" mb={6} style={{ flexShrink: 0 }}>
+        <Title order={6} fw={600} c="#e0e0e8" style={{ flex: 1 }} lineClamp={1}>{selectedMission.label}</Title>
+        {effectiveStatus && statusColors[effectiveStatus] && (
+          <Badge variant="light" color={statusColors[effectiveStatus]} size="xs">
+            {statusLabels[statusStringKey[effectiveStatus]] ?? effectiveStatus}
+          </Badge>
         )}
-      </div>
-      
-      <p className='selected-description'>{selectedMission.description}</p>
-      
-      {selectedMission?.reward && (
-        <div className='selected-rewards'>
-          <h4>Rewards</h4>
-          <ul>
-            {selectedMission.reward.cash && <li>${selectedMission.reward.cash}</li>}
-            {selectedMission.reward.items?.map((it: any, i: number) => (
-              <li key={i}>{it.count}x {it.name}</li>
-            ))}
-          </ul>
-        </div>
-      )}
-      
-      <div className='selected-actions'>
+      </Group>
+
+      {/* Scrollable description */}
+      <ScrollArea style={{ flex: 1, minHeight: 0 }} scrollbarSize={3} offsetScrollbars>
+        <Text size="xs" c="dimmed" lh={1.5}>{selectedMission.description}</Text>
+      </ScrollArea>
+
+      {/* Rewards + Actions — pinned at bottom */}
+      <div style={{ flexShrink: 0, paddingTop: 6 }}>
+        {selectedMission.reward && (
+          <Card bg="rgba(15, 15, 20, 0.6)" radius="sm" p="xs" mb={6}>
+            <Text size="xs" fw={600} c="dimmed" mb={2}>{rewardsLabel}</Text>
+            <Group gap={8}>
+              {!!selectedMission.reward.cash && (
+                <Text size="xs" c="#e0e0e8">{currencyPrefix}{selectedMission.reward.cash.toLocaleString()}</Text>
+              )}
+              {selectedMission.reward.items?.map((it, i) => (
+                <Text size="xs" c="#e0e0e8" key={i}>{it.count}x {it.name}</Text>
+              ))}
+            </Group>
+          </Card>
+        )}
         {renderActions()}
       </div>
-    </div>
+    </Card>
   );
 }

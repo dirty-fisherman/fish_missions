@@ -1,32 +1,49 @@
-name 'fivem-typescript-boilerplate'
-author 'Overextended'
-version '0.0.0'
-repository 'https://github.com/communityox/fivem-typescript-boilerplate.git'
+name 'fish_missions'
+author 'fish'
+version '2.0.0'
 fx_version 'cerulean'
 game 'gta5'
 ui_page 'dist/web/index.html'
-node_version '22'
 
 files {
-	'locales/*.json',
 	'dist/web/assets/index.css',
 	'dist/web/assets/index.js',
 	'dist/web/index.html',
-	'static/config.json',
-	'locales/en.json',
 }
 
 dependencies {
+	'ox_core',
 	'ox_lib',
 	'ox_target',
+	'oxmysql',
 	'/server:13068',
 	'/onesync',
 }
 
+shared_scripts {
+	'@ox_lib/init.lua',
+	'shared/config.lua',
+	'shared/helpers.lua',
+}
+
 client_scripts {
-	'dist/client.js',
+	'client/helpers.lua',
+	'client/lifecycle.lua',
+	'client/npc.lua',
+	'client/nui.lua',
+	'client/admin/*.lua',
+	'client/missions/*.lua',
 }
 
 server_scripts {
-	'dist/server.js',
+	'@oxmysql/lib/MySQL.lua',
+	'server/helpers.lua',
+	'server/db.lua',
+	'server/rewards.lua',
+	'server/tracker.lua',
+	'server/missions.lua',
+	'server/lifecycle.lua',
+	'server/assassination.lua',
+	'server/admin.lua',
+	'server/init.lua',
 }

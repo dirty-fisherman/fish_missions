@@ -1,5 +1,4 @@
 {
-  "extends": "../tsconfig.json",
   "compilerOptions": {
     "baseUrl": "./",
     "target": "ES2020",
@@ -11,7 +10,7 @@
       "~/*": ["../../*"],
       "@common/*": ["../src/common/*"]
     },
-    "types": ["@types/node", "./nui.d.ts"],
+    "types": ["./nui.d.ts"],
 
     /* Bundler mode */
     "moduleResolution": "bundler",

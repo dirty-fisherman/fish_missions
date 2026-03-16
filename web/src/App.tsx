@@ -3,39 +3,52 @@ import { isEnvBrowser } from './utils/misc';
 import { fetchNui } from './utils/fetchNui';
 import { debugMissionData } from './utils/debugData';
 import { useMissionStore } from './stores/missionStore';
-import { Sidebar } from './components/Sidebar';
+import { useAdminStore } from './stores/adminStore';
+import { MissionsPanel } from './components/MissionsPanel';
+import { AdminPanel } from './components/admin/AdminPanel';
 import { useKeyboardHandlers } from './hooks/useKeyboardHandlers';
 import { useMissionEvents } from './hooks/useMissionEvents';
+import { useNuiEvent } from './hooks/useNuiEvent';
 
 function App() {
   const { panelVisible, closePanel } = useMissionStore();
+  const adminMode = useAdminStore((s) => s.mode);
+  const setAdminMode = useAdminStore((s) => s.setMode);
+  const resetAdmin = useAdminStore((s) => s.reset);
 
-  function handleHideModal() {
+  function handleClose() {
+    if (adminMode === 'admin') {
+      void fetchNui('admin:close', {});
+      resetAdmin();
+    }
     closePanel();
     void fetchNui('focus:set', { hasFocus: false, hasCursor: false });
   }
 
-  // Initialize debug data for browser development
   useEffect(() => {
     if (isEnvBrowser()) {
       debugMissionData();
     }
   }, []);
 
-  // Use custom hooks for event handling
-  useKeyboardHandlers(panelVisible, handleHideModal);
-  useMissionEvents(handleHideModal);
+  // Admin NUI events
+  useNuiEvent('admin:open', () => {
+    setAdminMode('admin');
+  });
 
-  return (
-    <>
-      {/* Always-on tiny marker to confirm NUI mounted */}
-      <div style={{ position: 'fixed', bottom: 6, right: 8, fontSize: 10, opacity: 0.25, pointerEvents: 'none' }}>
-        missions-ui
-      </div>
+  useNuiEvent('admin:closed', () => {
+    resetAdmin();
+    closePanel();
+  });
 
-      <Sidebar isVisible={panelVisible} onClose={handleHideModal} />
-    </>
-  );
+  useKeyboardHandlers(panelVisible || adminMode === 'admin', handleClose);
+  useMissionEvents(handleClose);
+
+  if (adminMode === 'admin') {
+    return <AdminPanel />;
+  }
+
+  return <MissionsPanel isVisible={panelVisible} onClose={handleClose} />;
 }
 
 export default App;
