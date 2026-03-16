@@ -1,14 +1,32 @@
--- Delivery mission module: destination waypoint, timer, animation/prop attach, completion
+-- Delivery mission module: destination waypoint, timer, carry prop, completion
 
 Missions = Missions or {}
 
 local running = false
 local missionBlips = nil
-local propObjects = {}
 local startTime = 0
 local lastDisplayedTime = -1
 local isNearDestination = false
 local activeMission = nil
+local deliveryProp = nil
+
+-- Carry style presets: animation + bone + offsets
+local CARRY = {
+    both_hands = {
+        dict = 'anim@heists@box_carry@',
+        anim = 'idle',
+        bone = 60309,
+        pos = vec3(0.025, 0.08, 0.255),
+        rot = vec3(-145.0, 290.0, 0.0),
+    },
+    right_hand = {
+        dict = 'anim@heists@narcotics@trash',
+        anim = 'idle',
+        bone = 28422,
+        pos = vec3(0.11, -0.21, -0.43),
+        rot = vec3(-11.9, 0.0, 30.0),
+    },
+}
 
 local function formatTime(seconds)
     local mins = math.floor(seconds / 60)
@@ -16,71 +34,50 @@ local function formatTime(seconds)
     return ('%02d:%02d'):format(mins, secs)
 end
 
-local function loadModel(model)
-    local hash = type(model) == 'string' and joaat(model) or model
-    RequestModel(hash)
-    local tries = 0
-    while not HasModelLoaded(hash) and tries < 100 do
-        Wait(50)
-        tries = tries + 1
-    end
-end
+local function startCarry(propModel, carry, propOffset, propRotation)
+    local preset = CARRY[carry or 'both_hands']
+    if not propModel or not preset then return end
 
-local function loadAnimDict(dict)
-    RequestAnimDict(dict)
-    local tries = 0
-    while not HasAnimDictLoaded(dict) and tries < 100 do
-        Wait(50)
-        tries = tries + 1
-    end
-end
+    local pos = propOffset and vec3(propOffset.x, propOffset.y, propOffset.z) or preset.pos
+    local rot = propRotation and vec3(propRotation.x, propRotation.y, propRotation.z) or preset.rot
 
-local function applyAnimationAndProps(mission)
-    local animation = mission.params and mission.params.animation
-    if not animation then return end
+    CreateThread(function()
+        local ped = PlayerPedId()
+        local hash = joaat(propModel)
 
-    local ped = cache.ped
-    loadAnimDict(animation.Dictionary)
+        lib.requestAnimDict(preset.dict)
+        lib.requestModel(hash)
 
-    for _, prop in ipairs(animation.Options.Props) do
-        loadModel(prop.Name)
-    end
+        TaskPlayAnim(ped, preset.dict, preset.anim, 5.0, 5.0, -1, 51, 0, false, false, false)
+        RemoveAnimDict(preset.dict)
 
-    ClearPedTasks(ped)
+        local coords = GetEntityCoords(ped)
+        local obj = CreateObject(hash, coords.x, coords.y, coords.z + 0.2, false, true, false)
 
-    local flags = animation.Options.Flags
-    local animFlags = 0
-    if flags.Loop then animFlags = animFlags | 2 end
-    if flags.Move then animFlags = animFlags | 49 end
-    if animFlags == 0 then animFlags = 1 end
-
-    TaskPlayAnim(ped, animation.Dictionary, animation.Animation, 8.0, 8.0, -1, animFlags, 0.0, false, false, false)
-    Wait(100)
-
-    for _, propConfig in ipairs(animation.Options.Props) do
-        local propObj = CreateObject(joaat(propConfig.Name), 0.0, 0.0, 0.0, true, true, true)
-        local boneIndex = GetPedBoneIndex(ped, propConfig.Bone)
-
-        local offset = propConfig.Placement[1]
-        local rotation = propConfig.Placement[2]
-
-        AttachEntityToEntity(propObj, ped, boneIndex,
-            offset.x, offset.y, offset.z,
-            rotation.x, rotation.y, rotation.z,
-            true, true, false, true, 1, true)
-
-        propObjects[#propObjects + 1] = propObj
-    end
-end
-
-local function removeAnimationAndProps()
-    ClearPedTasks(cache.ped)
-    for _, propObj in ipairs(propObjects) do
-        if DoesEntityExist(propObj) then
-            DeleteEntity(propObj)
+        if obj and obj ~= 0 then
+            AttachEntityToEntity(obj, ped,
+                GetPedBoneIndex(ped, preset.bone),
+                pos.x, pos.y, pos.z,
+                rot.x, rot.y, rot.z,
+                true, true, false, true, 1, true)
+            deliveryProp = obj
         end
+
+        SetModelAsNoLongerNeeded(hash)
+    end)
+end
+
+local function stopCarry()
+    local ped = PlayerPedId()
+    ClearPedTasks(ped)
+    if deliveryProp then
+        if DoesEntityExist(deliveryProp) then
+            DetachEntity(deliveryProp, true, true)
+            SetEntityAsMissionEntity(deliveryProp, true, true)
+            DeleteEntity(deliveryProp)
+        end
+        deliveryProp = nil
     end
-    propObjects = {}
 end
 
 local function cleanup()
@@ -89,7 +86,7 @@ local function cleanup()
     lib.hideTextUI()
     RemoveMissionBlips(missionBlips)
     missionBlips = nil
-    removeAnimationAndProps()
+    stopCarry()
     startTime = 0
     lastDisplayedTime = -1
     isNearDestination = false
@@ -118,7 +115,7 @@ local function start(mission)
         radius = mission.params.radius,
     })
 
-    applyAnimationAndProps(mission)
+    startCarry(mission.params.prop, mission.params.carry, mission.params.propOffset, mission.params.propRotation)
 
     running = true
 

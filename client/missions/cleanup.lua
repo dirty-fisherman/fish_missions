@@ -56,8 +56,10 @@ local function collect(index, obj, mission)
     local msg
     if mission.messages and mission.messages.pickup then
         msg = mission.messages.pickup
-    else
+    elseif total > 1 then
         msg = ('Collected %d/%d %s'):format(completed, total, label)
+    else
+        msg = 'Collected ' .. label
     end
     lib.notify({ title = mission.label or 'Cleanup', description = msg, type = 'info' })
 
@@ -118,7 +120,11 @@ local function calculateZone(props)
 
     local maxDist = 0
     for _, prop in ipairs(props) do
-        local dist = #(center - prop.coords)
+        -- Explicitly construct vec3 so arithmetic works for both native vec3
+        -- values (from Config.missions) and plain {x,y,z} tables (admin-created
+        -- missions that weren't in config at load time).
+        local pc = vec3(prop.coords.x, prop.coords.y, prop.coords.z)
+        local dist = #(center - pc)
         if dist > maxDist then maxDist = dist end
     end
 
@@ -126,6 +132,15 @@ local function calculateZone(props)
 end
 
 local function start(mission)
+    -- Reset module state so restarts after natural completion work correctly.
+    -- (Natural completion via collect() cleans up blips/zone but does NOT
+    -- reset collected/spawned/remaining/total — only stop() does that.)
+    collected = {}
+    spawned = {}
+    remaining = 0
+    total = 0
+    propsSpawned = false
+
     -- Use local config for proper vector types (network serialization strips them)
     for _, enc in ipairs(Config.missions) do
         if enc.id == mission.id then

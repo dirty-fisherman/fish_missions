@@ -22,11 +22,21 @@ local function runInstallSql()
 end
 
 local function seedMissions()
+    if not Config.seedMissions then return end
     if not Config.missions then return end
     for i, enc in ipairs(Config.missions) do
         MySQL.query.await([[
-            INSERT IGNORE INTO `fish_missions` (`id`, `label`, `description`, `type`, `cooldown_seconds`, `npc`, `params`, `messages`, `reward`, `sort_order`)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO `fish_missions` (`id`, `label`, `description`, `type`, `cooldown_seconds`, `npc`, `params`, `messages`, `reward`)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON DUPLICATE KEY UPDATE
+                `label` = VALUES(`label`),
+                `description` = VALUES(`description`),
+                `type` = VALUES(`type`),
+                `cooldown_seconds` = VALUES(`cooldown_seconds`),
+                `npc` = VALUES(`npc`),
+                `params` = VALUES(`params`),
+                `messages` = VALUES(`messages`),
+                `reward` = VALUES(`reward`)
         ]], {
             enc.id,
             enc.label or enc.id,
@@ -37,13 +47,12 @@ local function seedMissions()
             json.encode(enc.params),
             enc.messages and json.encode(enc.messages) or nil,
             enc.reward and json.encode(enc.reward) or nil,
-            i,
         })
     end
 end
 
 local function loadMissionsFromDb()
-    local rows = MySQL.query.await('SELECT * FROM `fish_missions` WHERE `enabled` = 1 ORDER BY `sort_order`, `id`')
+    local rows = MySQL.query.await('SELECT * FROM `fish_missions` WHERE `enabled` = 1 ORDER BY `created_at` DESC')
     missionsCache = {}
     missionsList = {}
     for _, row in ipairs(rows or {}) do
@@ -59,7 +68,7 @@ local function loadMissionsFromDb()
             reward = row.reward and json.decode(row.reward) or nil,
             levelRequired = row.level_required or 0,
             prerequisites = row.prerequisites and json.decode(row.prerequisites) or nil,
-            enabled = row.enabled == 1,
+            enabled = row.enabled == 1 or row.enabled == true,
         }
         missionsCache[enc.id] = enc
         missionsList[#missionsList + 1] = enc
@@ -161,6 +170,60 @@ local function dbGetAllProgress(charId)
         'SELECT * FROM `fish_mission_progress` WHERE `char_id` = ?',
         { charId }
     ) or {}
+end
+
+-- ── XP helpers ──────────────────────────────────────────────────────────────
+
+local function dbGetXp(charId)
+    local row = MySQL.single.await('SELECT `xp` FROM `fish_mission_xp` WHERE `char_id` = ?', { charId })
+    return row and row.xp or 0
+end
+
+local function dbIncrementXp(charId)
+    MySQL.query.await([[
+        INSERT INTO `fish_mission_xp` (`char_id`, `xp`) VALUES (?, 1)
+        ON DUPLICATE KEY UPDATE `xp` = `xp` + 1
+    ]], { charId })
+end
+
+-- ── Daily completion helpers ────────────────────────────────────────────────
+
+local function todayDate()
+    return os.date('%Y-%m-%d')
+end
+
+local function dbGetDailyCompletions(charId)
+    local row = MySQL.single.await('SELECT `completions`, `reset_date` FROM `fish_mission_daily` WHERE `char_id` = ?', { charId })
+    if not row then return 0 end
+    if row.reset_date ~= todayDate() then return 0 end
+    return row.completions or 0
+end
+
+local function dbIncrementDaily(charId)
+    local today = todayDate()
+    MySQL.query.await([[
+        INSERT INTO `fish_mission_daily` (`char_id`, `completions`, `reset_date`) VALUES (?, 1, ?)
+        ON DUPLICATE KEY UPDATE
+            `completions` = IF(`reset_date` = VALUES(`reset_date`), `completions` + 1, 1),
+            `reset_date` = VALUES(`reset_date`)
+    ]], { charId, today })
+end
+
+-- ── Prerequisite check ──────────────────────────────────────────────────────
+
+local function checkPrerequisites(charId, enc)
+    if not enc.prerequisites or #enc.prerequisites == 0 then return true end
+    local rows = dbGetAllProgress(charId)
+    local completed = {}
+    for _, row in ipairs(rows) do
+        if row.times_completed and row.times_completed > 0 then
+            completed[row.mission_id] = true
+        end
+    end
+    for _, prereqId in ipairs(enc.prerequisites) do
+        if not completed[prereqId] then return false end
+    end
+    return true
 end
 
 -- ── Rewards ─────────────────────────────────────────────────────────────────
@@ -358,6 +421,29 @@ AddEventHandler(ResourceName .. ':mission:accept', function(data)
     end
 
     local charId = getCharacterId(src)
+
+    -- Level requirement check
+    if enc.levelRequired and enc.levelRequired > 0 then
+        local xp = dbGetXp(charId)
+        if xp < enc.levelRequired then
+            TriggerClientEvent(ResourceName .. ':mission:blocked', src, { missionId = enc.id, reason = 'level' })
+            return
+        end
+    end
+
+    -- Daily limit check
+    local limit = Config.dailyMissionLimit or 20
+    if limit > 0 and dbGetDailyCompletions(charId) >= limit then
+        TriggerClientEvent(ResourceName .. ':mission:blocked', src, { missionId = enc.id, reason = 'daily_limit' })
+        return
+    end
+
+    -- Prerequisite check
+    if not checkPrerequisites(charId, enc) then
+        TriggerClientEvent(ResourceName .. ':mission:blocked', src, { missionId = enc.id, reason = 'prerequisites' })
+        return
+    end
+
     local row = dbGetProgress(charId, enc.id)
     local t = now()
 
@@ -432,6 +518,10 @@ AddEventHandler(ResourceName .. ':mission:claim', function(data)
     local charId = getCharacterId(src)
     local row = dbGetProgress(charId, enc.id)
     local timesCompleted = (row and row.times_completed or 0) + 1
+
+    -- Track XP and daily completions
+    dbIncrementXp(charId)
+    dbIncrementDaily(charId)
 
     actives[enc.id] = nil
 
@@ -578,7 +668,7 @@ lib.callback.register(ResourceName .. ':assassination:requestSpawn', function(so
             local anyValid = false
             for _, netId in ipairs(data.netIds) do
                 local entity = NetworkGetEntityFromNetworkId(netId)
-                if entity and entity ~= 0 and DoesEntityExist(entity) then
+                if entity and entity ~= 0 and DoesEntityExist(entity) and not IsEntityDead(entity) then
                     anyValid = true
                     break
                 end
@@ -609,6 +699,214 @@ end)
 RegisterNetEvent(ResourceName .. ':assassination:pedsCleared')
 AddEventHandler(ResourceName .. ':assassination:pedsCleared', function(missionId)
     missionPedData[missionId] = nil
+end)
+
+-- ── canAccept callback (used by client before showing NUI) ──────────────────
+
+lib.callback.register(ResourceName .. ':mission:canAccept', function(src, missionId)
+    local enc = findMission(missionId)
+    if not enc then return { allowed = false, reason = 'not_found' } end
+
+    local charId = getCharacterId(src)
+    if not charId then return { allowed = false, reason = 'no_character' } end
+
+    -- Level requirement check
+    if enc.levelRequired and enc.levelRequired > 0 then
+        local xp = dbGetXp(charId)
+        if xp < enc.levelRequired then
+            return { allowed = false, reason = 'level' }
+        end
+    end
+
+    -- Daily limit
+    local limit = Config.dailyMissionLimit or 20
+    if limit > 0 and dbGetDailyCompletions(charId) >= limit then
+        return { allowed = false, reason = 'daily_limit' }
+    end
+
+    -- Prerequisites
+    if not checkPrerequisites(charId, enc) then
+        return { allowed = false, reason = 'prerequisites' }
+    end
+
+    return { allowed = true }
+end)
+
+-- ── Admin CRUD ──────────────────────────────────────────────────────────────
+
+local function isAdmin(src)
+    return IsPlayerAceAllowed(tostring(src), Config.adminPermission or 'command.missionadmin')
+end
+
+local function slugify(str)
+    return str:lower():gsub('[^%w]+', '_'):gsub('^_+', ''):gsub('_+$', '')
+end
+
+local function generateMissionId(label)
+    local base = slugify(label)
+    if base == '' then base = 'mission' end
+    if not missionsCache[base] then return base end
+    for i = 2, 9999 do
+        local candidate = base .. '_' .. i
+        if not missionsCache[candidate] then return candidate end
+    end
+    return base .. '_' .. os.time()
+end
+
+local function dbCreateMission(data)
+    MySQL.query.await([[
+        INSERT INTO `fish_missions` (`id`, `label`, `description`, `type`, `cooldown_seconds`, `npc`, `params`, `messages`, `reward`, `level_required`, `prerequisites`, `enabled`)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ]], {
+        data.id,
+        data.label or data.id,
+        data.description or '',
+        data.type or 'cleanup',
+        data.cooldownSeconds or 0,
+        json.encode(data.npc or {}),
+        json.encode(data.params or {}),
+        data.messages and json.encode(data.messages) or nil,
+        data.reward and json.encode(data.reward) or nil,
+        data.levelRequired or 0,
+        data.prerequisites and json.encode(data.prerequisites) or nil,
+        data.enabled ~= false and 1 or 0,
+    })
+end
+
+local function dbUpdateMission(id, data)
+    MySQL.query.await([[
+        UPDATE `fish_missions` SET
+            `label` = ?, `description` = ?, `type` = ?, `cooldown_seconds` = ?,
+            `npc` = ?, `params` = ?, `messages` = ?, `reward` = ?,
+            `level_required` = ?, `prerequisites` = ?, `enabled` = ?
+        WHERE `id` = ?
+    ]], {
+        data.label or id,
+        data.description or '',
+        data.type or 'cleanup',
+        data.cooldownSeconds or 0,
+        json.encode(data.npc or {}),
+        json.encode(data.params or {}),
+        data.messages and json.encode(data.messages) or nil,
+        data.reward and json.encode(data.reward) or nil,
+        data.levelRequired or 0,
+        data.prerequisites and json.encode(data.prerequisites) or nil,
+        data.enabled ~= false and 1 or 0,
+        id,
+    })
+end
+
+local function dbDeleteMission(id)
+    MySQL.query.await('DELETE FROM `fish_mission_progress` WHERE `mission_id` = ?', { id })
+    MySQL.query.await('DELETE FROM `fish_missions` WHERE `id` = ?', { id })
+end
+
+local function dbGetMissionsPaginated(page, pageSize, search)
+    local offset = (page - 1) * pageSize
+    local where = ''
+    local params = {}
+    if search and search ~= '' then
+        where = ' WHERE (`label` LIKE ? OR `description` LIKE ? OR `id` LIKE ?)'
+        local pattern = '%' .. search .. '%'
+        params = { pattern, pattern, pattern }
+    end
+    local countRow = MySQL.scalar.await('SELECT COUNT(*) FROM `fish_missions`' .. where, params)
+    local total = tonumber(countRow) or 0
+
+    local queryParams = {}
+    for _, v in ipairs(params) do queryParams[#queryParams + 1] = v end
+    queryParams[#queryParams + 1] = pageSize
+    queryParams[#queryParams + 1] = offset
+    local rows = MySQL.query.await(
+        'SELECT * FROM `fish_missions`' .. where .. ' ORDER BY `created_at` DESC LIMIT ? OFFSET ?',
+        queryParams
+    )
+
+    local missions = {}
+    for _, row in ipairs(rows or {}) do
+        missions[#missions + 1] = {
+            id = row.id,
+            label = row.label,
+            description = row.description,
+            type = row.type,
+            cooldownSeconds = row.cooldown_seconds,
+            npc = row.npc and json.decode(row.npc) or {},
+            params = row.params and json.decode(row.params) or {},
+            messages = row.messages and json.decode(row.messages) or nil,
+            reward = row.reward and json.decode(row.reward) or nil,
+            levelRequired = row.level_required or 0,
+            prerequisites = row.prerequisites and json.decode(row.prerequisites) or nil,
+            enabled = row.enabled == 1 or row.enabled == true,
+        }
+    end
+    return missions, total
+end
+
+local function broadcastMissionRefresh()
+    loadMissionsFromDb()
+    TriggerClientEvent(ResourceName .. ':missions:load', -1, missionsList)
+end
+
+-- Admin NUI callbacks (server-side via lib.callback)
+
+lib.callback.register(ResourceName .. ':admin:checkPermission', function(src)
+    return isAdmin(src)
+end)
+
+lib.callback.register(ResourceName .. ':admin:getMissions', function(src, data)
+    if not isAdmin(src) then return { missions = {}, total = 0 } end
+    local page = tonumber(data and data.page) or 1
+    local pageSize = tonumber(data and data.pageSize) or 25
+    local search = data and data.search or ''
+    local missions, total = dbGetMissionsPaginated(page, pageSize, search)
+    return { missions = missions, total = total, page = page, pageSize = pageSize }
+end)
+
+lib.callback.register(ResourceName .. ':admin:saveMission', function(src, data)
+    if not isAdmin(src) then return nil end
+    if not data or not data.label or data.label == '' then return nil end
+
+    local id = data.id
+    local isNew = not id or id == ''
+
+    if isNew then
+        id = generateMissionId(data.label)
+        data.id = id
+        -- Auto-generate NPC id if not set
+        if data.npc and (not data.npc.id or data.npc.id == '') then
+            data.npc.id = 'npc_' .. id
+        end
+        dbCreateMission(data)
+    else
+        -- Verify mission exists
+        local existing = MySQL.scalar.await('SELECT COUNT(*) FROM `fish_missions` WHERE `id` = ?', { id })
+        if (tonumber(existing) or 0) == 0 then return nil end
+        -- Auto-generate NPC id if not set
+        if data.npc and (not data.npc.id or data.npc.id == '') then
+            data.npc.id = 'npc_' .. id
+        end
+        dbUpdateMission(id, data)
+    end
+
+    broadcastMissionRefresh()
+    return { id = id, isNew = isNew }
+end)
+
+lib.callback.register(ResourceName .. ':admin:deleteMission', function(src, data)
+    if not isAdmin(src) then return false end
+    if not data or not data.id or data.id == '' then return false end
+
+    -- Cancel any active instances across all players
+    for playerSrc, actives in pairs(active) do
+        if actives[data.id] then
+            actives[data.id] = nil
+            TriggerClientEvent(ResourceName .. ':mission:cancelled', playerSrc, { missionId = data.id })
+        end
+    end
+
+    dbDeleteMission(data.id)
+    broadcastMissionRefresh()
+    return true
 end)
 
 -- ── Initialize ──────────────────────────────────────────────────────────────

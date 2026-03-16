@@ -59,7 +59,7 @@ export function MissionList() {
         <Group justify="space-between" wrap="nowrap" gap={6}>
           <Box style={{ minWidth: 0, flex: 1 }}>
             <Text size="sm" fw={500} c="#e0e0e8" truncate>{m.label}</Text>
-            {m.type === 'cleanup' && status?.progress && typeof status.progress.completed === 'number' && (
+            {m.type === 'cleanup' && status?.progress && typeof status.progress.completed === 'number' && status.progress.total > 1 && (
               <Text size="xs" c="dimmed" mt={1}>{status.progress.completed} / {status.progress.total}</Text>
             )}
           </Box>

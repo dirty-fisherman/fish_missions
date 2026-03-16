@@ -2,10 +2,18 @@ ResourceName = GetCurrentResourceName()
 
 Config = {
     EnableNuiCommand = false,
-    npcBlips = false,
+    npcBlips = true,
+    npcBlipSprite = 280,
+    npcBlipColor = 29,
+    npcBlipScale = 0.7,
+    maxNpcBlips = 10,
+    dailyMissionLimit = 20,
+    blockedNpcMessage = "I'm not interested in talking to you.",
     sidebarPosition = 'left',
+    adminPermission = 'command.missionadmin',
     characterSelectedEvent = 'ox:setActiveCharacter',
     characterDeselectedEvent = 'ox:playerLogout',
+    seedMissions = true, -- Set to false to prevent example missions from being inserted on startup
 
     missions = {
         {
@@ -64,26 +72,8 @@ Config = {
             params = {
                 destination = vec3(-537.46, -216.97, 37.65),
                 timeSeconds = 90,
-                animation = {
-                    Animation = 'idle',
-                    Dictionary = 'anim@heists@box_carry@',
-                    Options = {
-                        Flags = {
-                            Loop = true,
-                            Move = true,
-                        },
-                        Props = {
-                            {
-                                Bone = 60309,
-                                Name = 'hei_prop_heist_box',
-                                Placement = {
-                                    { x = 0.025, y = 0.08, z = 0.255 },
-                                    { x = -145.0, y = 290.0, z = 0.0 },
-                                },
-                            },
-                        },
-                    },
-                },
+                prop = 'hei_prop_heist_box',
+                carry = 'both_hands',
             },
             reward = {
                 cash = 1500,

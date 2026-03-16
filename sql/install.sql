@@ -31,3 +31,16 @@ CREATE TABLE IF NOT EXISTS `fish_mission_progress` (
     PRIMARY KEY (`id`),
     UNIQUE KEY `uq_char_mission` (`char_id`, `mission_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS `fish_mission_xp` (
+    `char_id` VARCHAR(60) NOT NULL,
+    `xp` INT UNSIGNED NOT NULL DEFAULT 0,
+    PRIMARY KEY (`char_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS `fish_mission_daily` (
+    `char_id` VARCHAR(60) NOT NULL,
+    `completions` INT UNSIGNED NOT NULL DEFAULT 0,
+    `reset_date` DATE NOT NULL,
+    PRIMARY KEY (`char_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

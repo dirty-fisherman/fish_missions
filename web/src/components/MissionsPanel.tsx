@@ -27,9 +27,9 @@ export function MissionsPanel({ isVisible, onClose }: MissionsPanelProps) {
             style={{
               ...styles,
               position: 'fixed',
-              top: 0,
-              [isLeft ? 'left' : 'right']: 0,
-              height: '100vh',
+              top: 24,
+              bottom: 24,
+              [isLeft ? 'left' : 'right']: 24,
               width: 380,
               zIndex: 1001,
               display: 'flex',
@@ -38,8 +38,8 @@ export function MissionsPanel({ isVisible, onClose }: MissionsPanelProps) {
               padding: 12,
               pointerEvents: 'auto',
               background: 'rgba(22, 22, 30, 0.95)',
-              borderRight: isLeft ? '1px solid rgba(60, 60, 80, 0.5)' : undefined,
-              borderLeft: !isLeft ? '1px solid rgba(60, 60, 80, 0.5)' : undefined,
+              borderRadius: 12,
+              border: '1px solid rgba(60, 60, 80, 0.5)',
             }}
           >
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>

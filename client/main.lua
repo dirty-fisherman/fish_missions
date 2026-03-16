@@ -114,6 +114,17 @@ local function createPedForNpc(n, missionId)
                     onSelect = function()
                         local enc = findMissionById(missionId)
                         if not enc then return end
+
+                        -- Check daily limit + prerequisites before opening NUI
+                        local result = lib.callback.await(ResourceName .. ':mission:canAccept', false, missionId)
+                        if result and not result.allowed then
+                            local msg = Config.blockedNpcMessage or "I'm not interested in talking to you."
+                            local speechName = n.speech or 'GENERIC_HI'
+                            PlayAmbientSpeech1(ped, speechName, 'Speech_Params_Force')
+                            notify({ title = enc.label or 'Mission', description = msg, type = 'error' })
+                            return
+                        end
+
                         local speechName = n.speech or 'GENERIC_HI'
                         PlayAmbientSpeech1(ped, speechName, 'Speech_Params_Force')
                         openMissionNui(n, enc)
@@ -123,12 +134,12 @@ local function createPedForNpc(n, missionId)
         end)
     end
 
-    -- NPC blip
-    if Config.npcBlips and n.blip then
+    -- NPC blip (unified style from config)
+    if Config.npcBlips and n.blip ~= false then
         local blip = AddBlipForEntity(ped)
-        SetBlipSprite(blip, n.blip.sprite or 280)
-        SetBlipColour(blip, n.blip.color or 0)
-        SetBlipScale(blip, n.blip.scale or 0.8)
+        SetBlipSprite(blip, Config.npcBlipSprite or 280)
+        SetBlipColour(blip, Config.npcBlipColor or 29)
+        SetBlipScale(blip, Config.npcBlipScale or 0.7)
         BeginTextCommandSetBlipName('STRING')
         AddTextComponentString(label)
         EndTextCommandSetBlipName(blip)
@@ -163,12 +174,23 @@ end
 
 local function spawnAllNpcs()
     cleanupAllNpcs()
+    local maxBlips = Config.maxNpcBlips or 10
+    local blipCount = 0
     for _, mission in ipairs(missionsList) do
         local n = mission.npc
         if n then
+            -- Cap blips: only the first N missions (by sort order) get blips
+            local origBlip = n.blip
+            if blipCount >= maxBlips then
+                n.blip = false
+            end
             local ok, ped = pcall(createPedForNpc, n, mission.id)
+            n.blip = origBlip -- restore original value
             if ok and ped then
                 npcs[n.id] = ped
+                if origBlip ~= false and blipCount < maxBlips then
+                    blipCount = blipCount + 1
+                end
             end
         end
     end
@@ -514,6 +536,12 @@ AddEventHandler(ResourceName .. ':mission:busy', function(data)
     notify({ title = 'Mission', description = ('You already have a mission %s.'):format(status), type = 'error', duration = 10000 })
 end)
 
+RegisterNetEvent(ResourceName .. ':mission:blocked')
+AddEventHandler(ResourceName .. ':mission:blocked', function(data)
+    local msg = Config.blockedNpcMessage or "I'm not interested in talking to you."
+    notify({ title = 'Mission', description = msg, type = 'error' })
+end)
+
 RegisterNetEvent(ResourceName .. ':mission:cancelled')
 AddEventHandler(ResourceName .. ':mission:cancelled', function(data)
     local t = missionTypes[data.missionId]
@@ -549,4 +577,546 @@ AddEventHandler(ResourceName .. ':missions:load', function(data)
         missionsById[enc.id] = enc
     end
     spawnAllNpcs()
+end)
+
+-- ── Admin: mission creator ──────────────────────────────────────────────────
+
+local adminMode = false
+local placingEntity = nil
+local placingField = nil
+local placingHeading = 0.0
+local placingType = nil -- 'ped' or 'prop'
+
+RegisterCommand('missionadmin', function()
+    lib.callback(ResourceName .. ':admin:checkPermission', false, function(allowed)
+        if not allowed then
+            notify({ title = 'Mission Admin', description = 'You do not have permission.', type = 'error' })
+            return
+        end
+        adminMode = true
+        SetNuiFocus(true, true)
+        sendNui('admin:open', {})
+    end)
+end, false)
+
+RegisterNUICallback('admin:close', function(_, cb)
+    adminMode = false
+    SetNuiFocus(false, false)
+    sendNui('admin:closed', {})
+    cb({ ok = true })
+end)
+
+local speechPreviewPed = nil
+
+RegisterNUICallback('admin:previewSpeech', function(data, cb)
+    cb({ ok = true })
+    local speech = data.speech
+    local model = data.model
+    if not speech or speech == '' or not model or model == '' then return end
+
+    -- Immediately clean up any existing preview ped
+    if speechPreviewPed and DoesEntityExist(speechPreviewPed) then
+        DeleteEntity(speechPreviewPed)
+        speechPreviewPed = nil
+    end
+
+    CreateThread(function()
+        local hash = joaat(model)
+        if not IsModelInCdimage(hash) then
+            notify({ type = 'error', description = 'Invalid NPC model: ' .. model })
+            return
+        end
+
+        lib.requestModel(hash)
+        local playerPos = GetEntityCoords(cache.ped)
+        local camRot = GetGameplayCamRot(2)
+        local rad = math.rad(camRot.z)
+        local fwd = vector3(-math.sin(rad), math.cos(rad), 0.0)
+        local spawnPos = playerPos + fwd * 1.5
+        local heading = (camRot.z + 180.0) % 360.0
+        local ped = CreatePed(4, hash, spawnPos.x, spawnPos.y, spawnPos.z, heading, false, false)
+        SetModelAsNoLongerNeeded(hash)
+
+        if not ped or ped == 0 then return end
+
+        speechPreviewPed = ped
+        FreezeEntityPosition(ped, true)
+        SetEntityInvincible(ped, true)
+        SetBlockingOfNonTemporaryEvents(ped, true)
+        SetEntityCollision(ped, false, false)
+
+        Wait(100)
+        PlayAmbientSpeech1(ped, speech, 'Speech_Params_Force')
+        Wait(3000)
+
+        if speechPreviewPed == ped and DoesEntityExist(ped) then
+            DeleteEntity(ped)
+            speechPreviewPed = nil
+        end
+    end)
+end)
+
+RegisterNUICallback('admin:getMissions', function(data, cb)
+    lib.callback(ResourceName .. ':admin:getMissions', false, function(result)
+        cb(result or { missions = {}, total = 0 })
+    end, data)
+end)
+
+RegisterNUICallback('admin:saveMission', function(data, cb)
+    lib.callback(ResourceName .. ':admin:saveMission', false, function(result)
+        cb(result or { ok = false })
+    end, data)
+end)
+
+RegisterNUICallback('admin:deleteMission', function(data, cb)
+    lib.callback(ResourceName .. ':admin:deleteMission', false, function(result)
+        cb({ ok = result == true })
+    end, data)
+end)
+
+-- ── Placement tool: camera raycast with preview entity ──────────────────────
+
+local function cleanupPlacement()
+    pcall(lib.hideTextUI)
+    if placingEntity and DoesEntityExist(placingEntity) then
+        DeleteEntity(placingEntity)
+    end
+    placingEntity = nil
+    placingField = nil
+    placingType = nil
+    placingHeading = 0.0
+end
+
+local function screenToWorld(distance)
+    local camRot = GetGameplayCamRot(2)
+    local camPos = GetGameplayCamCoord()
+
+    local rX = math.rad(camRot.x)
+    local rZ = math.rad(camRot.z)
+
+    local dX = -math.sin(rZ) * math.abs(math.cos(rX))
+    local dY =  math.cos(rZ) * math.abs(math.cos(rX))
+    local dZ =  math.sin(rX)
+
+    local dest = vector3(
+        camPos.x + dX * distance,
+        camPos.y + dY * distance,
+        camPos.z + dZ * distance
+    )
+    return camPos, dest
+end
+
+local function doRaycast()
+    local origin, target = screenToWorld(100.0)
+    local ray = StartShapeTestLosProbe(origin.x, origin.y, origin.z, target.x, target.y, target.z, 1 + 16, cache.ped, 7)
+    -- Must wait a frame for the shape test to complete
+    local result, hit, endCoords, surfaceNormal, entityHit
+    repeat
+        Wait(0)
+        result, hit, endCoords, surfaceNormal, entityHit = GetShapeTestResult(ray)
+    until result ~= 1 -- 1 = pending, 2 = complete
+    return hit == 1, endCoords, surfaceNormal, entityHit
+end
+
+RegisterNUICallback('admin:notify', function(data, cb)
+    notify(data)
+    cb({ ok = true })
+end)
+
+RegisterNUICallback('admin:startPlacement', function(data, cb)
+    -- Clean up any existing placement
+    cleanupPlacement()
+
+    local modelName = data.model
+    local field = data.field
+    local entityType = data.entityType or 'prop' -- 'ped' or 'prop'
+
+    if not modelName or modelName == '' then
+        cb({ ok = false, reason = 'no_model' })
+        return
+    end
+
+    local hash = type(modelName) == 'string' and joaat(modelName) or modelName
+    if not IsModelInCdimage(hash) then
+        notify({ type = 'error', description = 'Invalid model: ' .. tostring(modelName) })
+        cb({ ok = false, reason = 'invalid_model' })
+        return
+    end
+
+    -- Hide NUI focus so player can look around
+    SetNuiFocus(false, false)
+
+    RequestModel(hash)
+    local tries = 0
+    while not HasModelLoaded(hash) and tries < 100 do
+        Wait(50)
+        tries = tries + 1
+    end
+
+    if not HasModelLoaded(hash) then
+        SetNuiFocus(true, true)
+        cb({ ok = false, reason = 'model_not_found' })
+        return
+    end
+
+    local playerPos = GetEntityCoords(cache.ped)
+    placingHeading = 0.0
+    placingField = field
+    placingType = entityType
+
+    if entityType == 'ped' then
+        placingEntity = CreatePed(4, hash, playerPos.x, playerPos.y, playerPos.z, 0.0, false, false)
+    else
+        placingEntity = CreateObject(hash, playerPos.x, playerPos.y, playerPos.z, false, false, false)
+    end
+
+    if not placingEntity or not DoesEntityExist(placingEntity) then
+        SetNuiFocus(true, true)
+        cb({ ok = false, reason = 'spawn_failed' })
+        return
+    end
+
+    -- Configure preview entity
+    SetEntityAlpha(placingEntity, 150, false)
+    SetEntityCollision(placingEntity, false, false)
+    SetEntityInvincible(placingEntity, true)
+
+    if entityType == 'ped' then
+        SetBlockingOfNonTemporaryEvents(placingEntity, true)
+        FreezeEntityPosition(placingEntity, true)
+    end
+
+    lib.showTextUI('[E] Place  [Scroll] Rotate  [Backspace] Cancel', { position = 'top-center' })
+
+    cb({ ok = true })
+
+    -- Placement loop
+    CreateThread(function()
+        while placingEntity and DoesEntityExist(placingEntity) do
+            -- Check controls FIRST (before raycast) so scroll/key events are
+            -- never missed due to the raycast yielding a frame internally.
+
+            -- Suppress weapon wheel so scroll events reach us
+            DisableControlAction(0, 14, true)  -- next weapon
+            DisableControlAction(0, 15, true)  -- prev weapon
+            DisableControlAction(0, 16, true)  -- select next weapon
+            DisableControlAction(0, 17, true)  -- select prev weapon
+
+            -- Scroll wheel to rotate
+            if IsDisabledControlJustPressed(0, 15) then -- scroll up
+                placingHeading = (placingHeading + 15.0) % 360.0
+            end
+            if IsDisabledControlJustPressed(0, 14) then -- scroll down
+                placingHeading = (placingHeading - 15.0 + 360.0) % 360.0
+            end
+
+            -- E to confirm
+            if IsControlJustPressed(0, 38) then
+                local finalCoords = GetEntityCoords(placingEntity)
+                local finalHead = GetEntityHeading(placingEntity)
+                local capturedField = placingField
+                local capturedType = placingType
+                cleanupPlacement()
+                SetNuiFocus(true, true)
+                sendNui('admin:positionCaptured', {
+                    field = capturedField,
+                    entityType = capturedType,
+                    x = math.floor(finalCoords.x * 100) / 100,
+                    y = math.floor(finalCoords.y * 100) / 100,
+                    z = math.floor(finalCoords.z * 100) / 100,
+                    heading = math.floor(finalHead * 100) / 100,
+                })
+                return
+            end
+
+            -- Backspace to cancel
+            if IsControlJustPressed(0, 177) then
+                cleanupPlacement()
+                SetNuiFocus(true, true)
+                sendNui('admin:placementCancelled', { field = placingField })
+                return
+            end
+
+            -- Raycast to find ground position (yields at least one frame internally)
+            local hit, coords = doRaycast()
+
+            if hit then
+                -- Ground snap: PlaceObjectOnGroundProperly works for both props
+                -- and peds — more reliable than GetGroundZFor_3dCoord which can
+                -- return stale results when terrain isn't loaded yet.
+                SetEntityCoordsNoOffset(placingEntity, coords.x, coords.y, coords.z, false, false, false)
+                PlaceObjectOnGroundProperly(placingEntity)
+                SetEntityHeading(placingEntity, placingHeading)
+            end
+            -- No trailing Wait(0) needed: doRaycast already yields a frame.
+        end
+    end)
+end)
+
+-- Clean up placement if resource stops
+AddEventHandler('onClientResourceStop', function(resName)
+    if resName ~= ResourceName then return end
+    cleanupPlacement()
+end)
+
+-- ── Prop position adjustment (bone-local) ───────────────────────────────────
+
+local CARRY_PRESETS = {
+    both_hands = {
+        dict = 'anim@heists@box_carry@',
+        anim = 'idle',
+        bone = 60309,
+        pos = vec3(0.025, 0.08, 0.255),
+        rot = vec3(-145.0, 290.0, 0.0),
+    },
+    right_hand = {
+        dict = 'anim@heists@narcotics@trash',
+        anim = 'idle',
+        bone = 28422,
+        pos = vec3(0.11, -0.21, -0.43),
+        rot = vec3(-11.9, 0.0, 30.0),
+    },
+}
+
+RegisterNUICallback('admin:startPropAdjust', function(data, cb)
+    local propModel = data.prop
+    local carryStyle = data.carry or 'both_hands'
+    local preset = CARRY_PRESETS[carryStyle]
+
+    if not propModel or propModel == '' or not preset then
+        cb({ ok = false, reason = 'invalid_params' })
+        return
+    end
+
+    local propHash = joaat(propModel)
+    if not IsModelInCdimage(propHash) then
+        notify({ type = 'error', description = 'Invalid prop model: ' .. tostring(propModel) })
+        cb({ ok = false, reason = 'invalid_model' })
+        return
+    end
+
+    SetNuiFocus(false, false)
+    cb({ ok = true })
+
+    CreateThread(function()
+        local ped = cache.ped
+        local propHash = joaat(propModel)
+        local pedModel = GetEntityModel(ped)
+
+        lib.requestAnimDict(preset.dict)
+        lib.requestModel(propHash)
+        lib.requestModel(pedModel)
+
+        -- Use camera heading so clone spawns where the player is looking
+        local pedCoords = GetEntityCoords(ped)
+        local camRot = GetGameplayCamRot(2)
+        local camYaw = camRot.z
+        local rad = math.rad(camYaw)
+        local fwd = vector3(-math.sin(rad), math.cos(rad), 0.0)
+        local clonePos = pedCoords + fwd * 1.5
+        local cloneHeading = (camYaw + 180.0) % 360.0
+
+        local clone = CreatePed(4, pedModel, clonePos.x, clonePos.y, clonePos.z, cloneHeading, false, false)
+        SetModelAsNoLongerNeeded(pedModel)
+
+        if not clone or clone == 0 then
+            SetNuiFocus(true, true)
+            sendNui('admin:propAdjustCancelled', {})
+            return
+        end
+
+        SetEntityHeading(clone, cloneHeading)
+        Wait(50)
+
+        FreezeEntityPosition(clone, true)
+        SetEntityInvincible(clone, true)
+        SetBlockingOfNonTemporaryEvents(clone, true)
+        SetPedCanRagdoll(clone, false)
+
+        -- Play carry animation on clone
+        TaskPlayAnim(clone, preset.dict, preset.anim, 5.0, 5.0, -1, 51, 0, false, false, false)
+        RemoveAnimDict(preset.dict)
+        Wait(200)
+
+        -- Spawn prop
+        local obj = CreateObject(propHash, clonePos.x, clonePos.y, clonePos.z + 0.2, false, true, false)
+        SetModelAsNoLongerNeeded(propHash)
+
+        if not obj or obj == 0 then
+            DeleteEntity(clone)
+            SetNuiFocus(true, true)
+            sendNui('admin:propAdjustCancelled', {})
+            return
+        end
+
+        local boneIdx = GetPedBoneIndex(clone, preset.bone)
+
+        -- Initialize bone-local offsets from saved values or preset defaults
+        local posX = data.propOffset and data.propOffset.x or preset.pos.x
+        local posY = data.propOffset and data.propOffset.y or preset.pos.y
+        local posZ = data.propOffset and data.propOffset.z or preset.pos.z
+        local rotX = data.propRotation and data.propRotation.x or preset.rot.x
+        local rotY = data.propRotation and data.propRotation.y or preset.rot.y
+        local rotZ = data.propRotation and data.propRotation.z or preset.rot.z
+
+        -- Initial attach (identical call to delivery.lua startCarry)
+        AttachEntityToEntity(obj, clone, boneIdx,
+            posX, posY, posZ, rotX, rotY, rotZ,
+            true, true, false, true, 1, true)
+
+        -- Probe bone axes: measure how each bone-local axis maps to world space
+        -- This lets us convert world-relative input into bone-local deltas
+        Wait(0)
+        local eps = 0.1
+        local basePos = GetEntityCoords(obj)
+
+        local function probeAxis(dx, dy, dz)
+            AttachEntityToEntity(obj, clone, boneIdx,
+                posX + dx, posY + dy, posZ + dz, rotX, rotY, rotZ,
+                true, true, false, true, 1, true)
+            Wait(0)
+            local p = GetEntityCoords(obj)
+            local d = p - basePos
+            local len = #d
+            if len < 0.001 then return vector3(dx, dy, dz) end -- fallback to identity
+            return d / len
+        end
+
+        local boneAxisX = probeAxis(eps, 0.0, 0.0)
+        local boneAxisY = probeAxis(0.0, eps, 0.0)
+        local boneAxisZ = probeAxis(0.0, 0.0, eps)
+
+        -- Restore original attachment
+        AttachEntityToEntity(obj, clone, boneIdx,
+            posX, posY, posZ, rotX, rotY, rotZ,
+            true, true, false, true, 1, true)
+
+        local function dot(a, b) return a.x * b.x + a.y * b.y + a.z * b.z end
+
+        -- Compute clone-relative directions (fixed for entire session since clone is frozen)
+        local cloneYaw = math.rad(GetEntityHeading(clone))
+        local cloneFwd = vector3(-math.sin(cloneYaw), math.cos(cloneYaw), 0.0)
+        local cloneRight = vector3(math.cos(cloneYaw), math.sin(cloneYaw), 0.0)
+        local worldUp = vector3(0.0, 0.0, 1.0)
+
+        -- Hide admin panel
+        sendNui('admin:gizmoMode', { active = true })
+        Wait(50)
+
+        local adjusting = true
+        local rotMode = false -- false = position mode, true = rotation mode
+        local lastTextUI = ''
+
+        local function r3(v) return math.floor(v * 1000 + 0.5) / 1000 end
+
+        while adjusting do
+            Wait(0)
+
+            -- Disable ALL controls, then re-enable movement + camera only
+            DisableAllControlActions(0)
+            EnableControlAction(0, 1, true)   -- LookLeftRight
+            EnableControlAction(0, 2, true)   -- LookUpDown
+            EnableControlAction(0, 30, true)  -- MoveLeftRight
+            EnableControlAction(0, 31, true)  -- MoveUpDown
+            EnableControlAction(0, 32, true)  -- MoveUpOnly
+            EnableControlAction(0, 33, true)  -- MoveDownOnly
+            EnableControlAction(0, 34, true)  -- MoveLeftOnly
+            EnableControlAction(0, 35, true)  -- MoveRightOnly
+
+            -- Shift = fine mode (Disabled variant since all controls are disabled)
+            local fine = IsDisabledControlPressed(0, 21)
+            local posStep = fine and 0.005 or 0.02
+            local rotStep = fine and 1.0 or 5.0
+
+            -- R = toggle position / rotation mode
+            if IsDisabledControlJustPressed(0, 45) then
+                rotMode = not rotMode
+            end
+
+            local changed = false
+
+            if rotMode then
+                -- Rotation mode: directly modify one bone-local axis at a time
+                if IsDisabledControlJustPressed(0, 175) then rotZ = rotZ + rotStep; changed = true end      -- Right = yaw clockwise
+                if IsDisabledControlJustPressed(0, 174) then rotZ = rotZ - rotStep; changed = true end      -- Left = yaw counter-clockwise
+                if IsDisabledControlJustPressed(0, 172) then rotX = rotX + rotStep; changed = true end      -- Up = pitch forward
+                if IsDisabledControlJustPressed(0, 173) then rotX = rotX - rotStep; changed = true end      -- Down = pitch backward
+                if IsDisabledControlJustPressed(0, 15) then rotY = rotY + rotStep; changed = true end       -- Scroll up = roll right
+                if IsDisabledControlJustPressed(0, 14) then rotY = rotY - rotStep; changed = true end       -- Scroll down = roll left
+            else
+                -- Position mode: clone-relative input converted to bone-local deltas
+                local worldDelta = vector3(0.0, 0.0, 0.0)
+                if IsDisabledControlJustPressed(0, 175) then worldDelta = cloneRight * posStep; changed = true end     -- Right arrow = clone's right
+                if IsDisabledControlJustPressed(0, 174) then worldDelta = -cloneRight * posStep; changed = true end    -- Left arrow = clone's left
+                if IsDisabledControlJustPressed(0, 172) then worldDelta = cloneFwd * posStep; changed = true end       -- Up arrow = clone's forward
+                if IsDisabledControlJustPressed(0, 173) then worldDelta = -cloneFwd * posStep; changed = true end      -- Down arrow = clone's backward
+                if IsDisabledControlJustPressed(0, 15) then worldDelta = worldUp * posStep; changed = true end         -- Scroll up = raise
+                if IsDisabledControlJustPressed(0, 14) then worldDelta = -worldUp * posStep; changed = true end        -- Scroll down = lower
+
+                if changed then
+                    posX = posX + dot(worldDelta, boneAxisX)
+                    posY = posY + dot(worldDelta, boneAxisY)
+                    posZ = posZ + dot(worldDelta, boneAxisZ)
+                end
+            end
+
+            -- Re-attach prop with updated offsets (same call as delivery.lua)
+            if changed then
+                AttachEntityToEntity(obj, clone, boneIdx,
+                    posX, posY, posZ, rotX, rotY, rotZ,
+                    true, true, false, true, 1, true)
+            end
+
+            -- Update textUI with live values
+            local modeStr = rotMode and 'ROTATION' or 'POSITION'
+            local text = ('[%s]  Pos: %.3f, %.3f, %.3f  |  Rot: %.1f, %.1f, %.1f\n[Arrows] %s  [Scroll] %s  [R] Mode  [Shift] Fine  [E] Save  [Backspace] Cancel'):format(
+                modeStr, posX, posY, posZ, rotX, rotY, rotZ,
+                rotMode and 'Rotation' or 'Position',
+                rotMode and 'Roll' or 'Height')
+
+            if text ~= lastTextUI then
+                lastTextUI = text
+                lib.showTextUI(text, { position = 'top-center' })
+            end
+
+            -- E = confirm
+            if IsDisabledControlJustPressed(0, 38) then
+                adjusting = false
+                pcall(lib.hideTextUI)
+
+                if DoesEntityExist(obj) then
+                    SetEntityAsMissionEntity(obj, true, true)
+                    DeleteEntity(obj)
+                end
+                if DoesEntityExist(clone) then DeleteEntity(clone) end
+
+                SetNuiFocus(true, true)
+                Wait(100)
+                sendNui('admin:gizmoMode', { active = false })
+                sendNui('admin:propAdjusted', {
+                    propOffset = { x = r3(posX), y = r3(posY), z = r3(posZ) },
+                    propRotation = { x = r3(rotX), y = r3(rotY), z = r3(rotZ) },
+                })
+                return
+            end
+
+            -- Backspace = cancel
+            if IsDisabledControlJustPressed(0, 177) then
+                adjusting = false
+                pcall(lib.hideTextUI)
+
+                if DoesEntityExist(obj) then
+                    SetEntityAsMissionEntity(obj, true, true)
+                    DeleteEntity(obj)
+                end
+                if DoesEntityExist(clone) then DeleteEntity(clone) end
+
+                SetNuiFocus(true, true)
+                Wait(100)
+                sendNui('admin:gizmoMode', { active = false })
+                sendNui('admin:propAdjustCancelled', {})
+                return
+            end
+        end
+    end)
 end)

@@ -185,6 +185,18 @@ local function startMonitoring(mission)
 end
 
 local function start(mission)
+    -- Clean up any lingering state from a previous attempt
+    monitoring = false
+    for _, ped in pairs(pedHandles) do
+        if DoesEntityExist(ped) then
+            SetEntityAsMissionEntity(ped, true, true)
+            DeleteEntity(ped)
+        end
+    end
+    pedNetIds = {}
+    pedHandles = {}
+    pedsSpawned = false
+
     -- Use local config for proper vector types (network serialization strips them)
     for _, enc in ipairs(Config.missions) do
         if enc.id == mission.id then
