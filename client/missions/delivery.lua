@@ -10,24 +10,6 @@ local isNearDestination = false
 local activeMission = nil
 local deliveryProp = nil
 
--- Carry style presets: animation + bone + offsets
-local CARRY = {
-    both_hands = {
-        dict = 'anim@heists@box_carry@',
-        anim = 'idle',
-        bone = 60309,
-        pos = vec3(0.025, 0.08, 0.255),
-        rot = vec3(-145.0, 290.0, 0.0),
-    },
-    right_hand = {
-        dict = 'anim@heists@narcotics@trash',
-        anim = 'idle',
-        bone = 28422,
-        pos = vec3(0.11, -0.21, -0.43),
-        rot = vec3(-11.9, 0.0, 30.0),
-    },
-}
-
 local function formatTime(seconds)
     local mins = math.floor(seconds / 60)
     local secs = seconds % 60
@@ -35,7 +17,7 @@ local function formatTime(seconds)
 end
 
 local function startCarry(propModel, carry, propOffset, propRotation)
-    local preset = CARRY[carry or 'both_hands']
+    local preset = CARRY_PRESETS[carry or 'both_hands']
     if not propModel or not preset then return end
 
     local pos = propOffset and vec3(propOffset.x, propOffset.y, propOffset.z) or preset.pos
@@ -84,7 +66,7 @@ local function cleanup()
     running = false
     activeMission = nil
     lib.hideTextUI()
-    RemoveMissionBlips(missionBlips)
+    Client.RemoveMissionBlips(missionBlips)
     missionBlips = nil
     stopCarry()
     startTime = 0
@@ -108,7 +90,7 @@ local function start(mission)
     startTime = GetGameTimer()
 
     local blipLocation = mission.params.area or destination
-    missionBlips = CreateMissionBlips({
+    missionBlips = Client.CreateMissionBlips({
         location = blipLocation,
         label = mission.label,
         area = mission.params.area,
@@ -141,7 +123,7 @@ local function start(mission)
                 local isLowTime = displayRemaining <= 30
 
                 if nearDestination then
-                    lib.showTextUI(('Press [E] to deliver (%s)'):format(formatTime(displayTime)), {
+                    lib.showTextUI(Config.strings.delivery_near:format(formatTime(displayTime)), {
                         position = 'top-center',
                         icon = 'hand-holding-box',
                         iconColor = '#4CAF50',
@@ -152,7 +134,7 @@ local function start(mission)
                         },
                     })
                 else
-                    lib.showTextUI(('You have %s remaining'):format(formatTime(displayTime)), {
+                    lib.showTextUI(Config.strings.delivery_timer:format(formatTime(displayTime)), {
                         position = 'top-center',
                         icon = 'clock',
                         style = {
@@ -172,7 +154,7 @@ local function start(mission)
             if remainingTime <= 0 then
                 lib.notify({
                     title = mission.label or 'Mission Failed',
-                    description = 'You ran out of time.',
+                    description = Config.strings.delivery_timeout,
                     type = 'error',
                     duration = 10000,
                 })

@@ -17,7 +17,7 @@ jobs:
         run: sudo apt install zip
 
       - name: Checkout source code
-        uses: actions/checkout@v2
+        uses: actions/checkout@v4
         with:
           fetch-depth: 0
           ref: ${{ github.ref }}
@@ -34,7 +34,7 @@ jobs:
           echo '::set-output name=DATE::$(date +'%D')'
 
       - name: Setup node
-        uses: actions/setup-node@v3
+        uses: actions/setup-node@v4
         with:
           node-version: 18
           cache: 'pnpm'
@@ -52,15 +52,9 @@ jobs:
       - name: Run build
         run: pnpm build
 
-      # - name: Update repository
-      #   run: |
-      #     git add .
-      #     git commit -am '${{ github.ref_name }}'
-      #     git push
-
       - name: Bundle files
         run: |
-          zip -r ${{ github.event.repository.name }}.zip . -x "./.*" "./node_modules/*" "./scripts/*" "./src/*" "./web/*" "./tsconfig.json" "./pnpm-lock.yaml" "./package.json" "./eslint.config.js"
+          zip -r ${{ github.event.repository.name }}.zip . -x "./.*" "./node_modules/*" "./web/*" "./pnpm-lock.yaml" "./package.json" "./biome.json" "./tsconfig.json"
 
       - name: Create Release
         uses: 'marvinpinto/action-automatic-releases@v1.2.1'

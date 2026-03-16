@@ -4,11 +4,18 @@ import { IconMapPin } from './icons';
 import { fetchNui } from '../utils/fetchNui';
 import { formatTimeRemaining, getMissionWaypoint } from '../utils/missionHelpers';
 import { useMissionStore } from '../stores/missionStore';
+import { useStr } from '../utils/useStr';
 
-const statusBadge: Record<string, { label: string; color: string }> = {
-  complete: { label: 'complete', color: 'green' },
-  turnin: { label: 'complete', color: 'green' },
-  cooldown: { label: 'on cooldown', color: 'gray' },
+const statusColors: Record<string, string> = {
+  complete: 'green',
+  turnin: 'green',
+  cooldown: 'gray',
+};
+
+const statusStringKey: Record<string, string> = {
+  complete: 'status_complete',
+  turnin: 'status_complete',
+  cooldown: 'status_cooldown',
 };
 
 interface MissionCardProps {
@@ -18,6 +25,22 @@ interface MissionCardProps {
 export function MissionCard({ onClose }: MissionCardProps) {
   const { offering, openedViaNpc, selectedMission, selectedNpc, getStatusById, addDiscoveredMission } = useMissionStore();
   const [, forceUpdate] = useState({});
+  const emptyDetail = useStr('empty_detail');
+  const btnAccept = useStr('btn_accept');
+  const btnReject = useStr('btn_reject');
+  const btnClaim = useStr('btn_claim');
+  const btnCollect = useStr('btn_collect');
+  const btnCancel = useStr('btn_cancel');
+  const btnWaypoint = useStr('btn_waypoint');
+  const rewardsLabel = useStr('rewards_label');
+  const cooldownComeback = useStr('cooldown_comeback');
+  const currencyPrefix = useStr('currency_prefix');
+  const strStatusComplete = useStr('status_complete');
+  const strStatusCooldown = useStr('status_cooldown');
+  const statusLabels: Record<string, string> = {
+    status_complete: strStatusComplete,
+    status_cooldown: strStatusCooldown,
+  };
 
   useEffect(() => {
     const id = setInterval(() => forceUpdate({}), 1000);
@@ -34,7 +57,7 @@ export function MissionCard({ onClose }: MissionCardProps) {
         style={{ borderColor: 'rgba(60, 60, 80, 0.5)', height: 240, flexShrink: 0 }}
       >
         <Stack align="center" justify="center" h="100%">
-          <Text size="sm" c="dimmed">Select a mission to view details</Text>
+          <Text size="sm" c="dimmed">{emptyDetail}</Text>
         </Stack>
       </Card>
     );
@@ -93,38 +116,38 @@ export function MissionCard({ onClose }: MissionCardProps) {
   const renderActions = () => {
     if (effectiveStatus === 'cooldown' && cooldownRemaining > 0) {
       return (
-        <Stack gap={4}>
-          <Button variant="light" color="gray" disabled fullWidth size="xs">
-            Come back in {formatTimeRemaining(cooldownRemaining)}
+        <Group gap="xs" grow>
+          <Button variant="light" color="gray" disabled size="xs">
+            {cooldownComeback.replace('%s', formatTimeRemaining(cooldownRemaining))}
           </Button>
-          <Button variant="light" color="blue" onClick={handleWaypoint} fullWidth size="xs" leftSection={<IconMapPin />}>
-            Set Waypoint
+          <Button variant="light" color="blue" onClick={handleWaypoint} size="xs" leftSection={<IconMapPin />}>
+            {btnWaypoint}
           </Button>
-        </Stack>
+        </Group>
       );
     }
 
     if (shouldOffer) {
       return (
         <Group gap="xs" grow>
-          <Button variant="filled" color="blue" onClick={handleAccept} size="xs">Accept</Button>
-          <Button variant="subtle" color="gray" onClick={handleReject} size="xs">Reject</Button>
+          <Button variant="filled" color="blue" onClick={handleAccept} size="xs">{btnAccept}</Button>
+          <Button variant="subtle" color="gray" onClick={handleReject} size="xs">{btnReject}</Button>
         </Group>
       );
     }
 
     if (effectiveStatus === 'complete' && isAtNpcForMission) {
-      return <Button variant="filled" color="green" onClick={handleClaim} fullWidth size="xs">Claim Reward</Button>;
+      return <Button variant="filled" color="green" onClick={handleClaim} fullWidth size="xs">{btnClaim}</Button>;
     }
 
     if (effectiveStatus === 'in-progress') {
       return (
         <Group gap="xs" grow>
           <Button variant="light" color="blue" onClick={handleWaypoint} size="xs" leftSection={<IconMapPin />}>
-            Set Waypoint
+            {btnWaypoint}
           </Button>
           <Button variant="light" color="red" onClick={handleCancel} size="xs">
-            Cancel
+            {btnCancel}
           </Button>
         </Group>
       );
@@ -133,7 +156,7 @@ export function MissionCard({ onClose }: MissionCardProps) {
     if (effectiveStatus === 'complete') {
       return (
         <Button variant="light" color="green" onClick={handleWaypoint} fullWidth size="xs" leftSection={<IconMapPin />}>
-          Collect Reward
+          {btnCollect}
         </Button>
       );
     }
@@ -141,7 +164,7 @@ export function MissionCard({ onClose }: MissionCardProps) {
     if (effectiveStatus === 'available' || effectiveStatus === 'cancelled') {
       return (
         <Button variant="light" color="blue" onClick={handleWaypoint} fullWidth size="xs" leftSection={<IconMapPin />}>
-          Set Waypoint
+          {btnWaypoint}
         </Button>
       );
     }
@@ -160,9 +183,9 @@ export function MissionCard({ onClose }: MissionCardProps) {
       {/* Header — fixed */}
       <Group justify="space-between" align="flex-start" mb={6} style={{ flexShrink: 0 }}>
         <Title order={6} fw={600} c="#e0e0e8" style={{ flex: 1 }} lineClamp={1}>{selectedMission.label}</Title>
-        {effectiveStatus && statusBadge[effectiveStatus] && (
-          <Badge variant="light" color={statusBadge[effectiveStatus].color} size="xs">
-            {statusBadge[effectiveStatus].label}
+        {effectiveStatus && statusColors[effectiveStatus] && (
+          <Badge variant="light" color={statusColors[effectiveStatus]} size="xs">
+            {statusLabels[statusStringKey[effectiveStatus]] ?? effectiveStatus}
           </Badge>
         )}
       </Group>
@@ -176,10 +199,10 @@ export function MissionCard({ onClose }: MissionCardProps) {
       <div style={{ flexShrink: 0, paddingTop: 6 }}>
         {selectedMission.reward && (
           <Card bg="rgba(15, 15, 20, 0.6)" radius="sm" p="xs" mb={6}>
-            <Text size="xs" fw={600} c="dimmed" mb={2}>Rewards</Text>
+            <Text size="xs" fw={600} c="dimmed" mb={2}>{rewardsLabel}</Text>
             <Group gap={8}>
               {!!selectedMission.reward.cash && (
-                <Text size="xs" c="#e0e0e8">${selectedMission.reward.cash.toLocaleString()}</Text>
+                <Text size="xs" c="#e0e0e8">{currencyPrefix}{selectedMission.reward.cash.toLocaleString()}</Text>
               )}
               {selectedMission.reward.items?.map((it, i) => (
                 <Text size="xs" c="#e0e0e8" key={i}>{it.count}x {it.name}</Text>

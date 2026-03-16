@@ -51,7 +51,8 @@ local function spawnTargetPeds(mission)
         loadModel(target.model)
 
         local c = target.coords
-        local ped = CreatePed(4, joaat(target.model), c.x, c.y, c.z, c.w or 0.0, true, true)
+        local heading = (mission.targetHeadings and mission.targetHeadings[i]) or 0.0
+        local ped = CreatePed(4, joaat(target.model), c.x, c.y, c.z, heading, true, true)
 
         if DoesEntityExist(ped) then
             SetEntityAsMissionEntity(ped, true, true)
@@ -116,7 +117,9 @@ local function requestAndSpawnPeds(mission)
     for _ = 1, maxRetries do
         local result = lib.callback.await(ResourceName .. ':assassination:requestSpawn', false, mission.id)
 
-        if result.status == 'spawn' then
+        if not result then
+            Wait(500)
+        elseif result.status == 'spawn' then
             -- We are the spawner
             local netIds = spawnTargetPeds(mission)
             pedNetIds = netIds
@@ -168,7 +171,7 @@ local function startMonitoring(mission)
             if allResolved and allDead and #pedNetIds > 0 then
                 monitoring = false
 
-                RemoveMissionBlips(missionBlips)
+                Client.RemoveMissionBlips(missionBlips)
                 missionBlips = nil
 
                 if activeZone then
@@ -197,14 +200,6 @@ local function start(mission)
     pedHandles = {}
     pedsSpawned = false
 
-    -- Use local config for proper vector types (network serialization strips them)
-    for _, enc in ipairs(Config.missions) do
-        if enc.id == mission.id then
-            mission = enc
-            break
-        end
-    end
-
     local targets = mission.params.targets
     if not targets or #targets == 0 then return end
 
@@ -213,7 +208,7 @@ local function start(mission)
 
     -- Create blips
     if mission.params.blip then
-        missionBlips = CreateMissionBlips({
+        missionBlips = Client.CreateMissionBlips({
             location = center,
             label = mission.label,
             area = center,
@@ -258,7 +253,7 @@ local function stop()
         activeZone = nil
     end
 
-    RemoveMissionBlips(missionBlips)
+    Client.RemoveMissionBlips(missionBlips)
     missionBlips = nil
 
     -- Don't delete networked peds — other players may be fighting them

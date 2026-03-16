@@ -101,9 +101,12 @@ export function MissionEditor({ onSaved, onDeleted }: MissionEditorProps) {
 
     // Type-specific validation
     if (editing.type === 'cleanup') {
-      const props = editing.params?.props;
-      if (!props || !Array.isArray(props) || props.length === 0) {
-        errs['params.props'] = 'At least 1 prop required for cleanup';
+      const propGroups = editing.params?.propGroups;
+      const legacyProps = editing.params?.props;
+      const hasGroups = propGroups && Array.isArray(propGroups) && propGroups.length > 0;
+      const hasLegacy = legacyProps && Array.isArray(legacyProps) && legacyProps.length > 0;
+      if (!hasGroups && !hasLegacy) {
+        errs['params.props'] = 'At least 1 prop group required for cleanup';
       }
     }
     if (editing.type === 'delivery') {

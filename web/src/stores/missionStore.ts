@@ -32,11 +32,15 @@ export interface NpcData {
   };
 }
 
+export type Strings = Record<string, string>;
+
 interface MissionState {
   panelVisible: boolean;
   offering: boolean;
   openedViaNpc: boolean;
   sidebarPosition: 'left' | 'right';
+  isAdmin: boolean;
+  strings: Strings;
 
   selectedMission: Mission | null;
   selectedNpc: NpcData | null;
@@ -78,6 +82,8 @@ export const useMissionStore = create<MissionState>()(
     offering: false,
     openedViaNpc: false,
     sidebarPosition: 'left',
+    isAdmin: false,
+    strings: {},
     selectedMission: null,
     selectedNpc: null,
     discoveredMissions: [],

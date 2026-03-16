@@ -1,57 +1,113 @@
-# fivem-typescript-boilerplate
+# fish_missions
 
-A boilerplate for creating FiveM resources with TypeScript.
+A mission system for FiveM servers running **ox_core**. Players discover missions by interacting with NPCs in the world, complete objectives (delivery, cleanup, assassination), and claim rewards. Includes a built-in admin tool for creating and editing missions in-game.
 
-## Getting Started
+## Dependencies
 
-### Node.js v18+
+- [ox_core](https://github.com/overextended/ox_core)
+- [ox_lib](https://github.com/overextended/ox_lib)
+- [ox_target](https://github.com/overextended/ox_target)
+- [oxmysql](https://github.com/overextended/oxmysql)
+- FiveM server build 13068+ with OneSync
 
-Install any LTS release of [`Node.js`](https://nodejs.org/) from v18.
+## Installation
 
-### pnpm
+1. Place `fish_missions` in your resources folder.
+2. Add `ensure fish_missions` to your server.cfg (after ox_core, ox_lib, ox_target, oxmysql).
+3. The required database tables are created automatically on first start.
 
-Install the [`pnpm`](https://pnpm.io/installation) package manager globally.
+## Mission Types
 
+| Type | Description |
+|------|-------------|
+| **Delivery** | Carry a prop to a destination within a time limit. |
+| **Cleanup** | Collect scattered props in a zone. |
+| **Assassination** | Eliminate a target NPC. |
+
+Missions are created entirely in-game using the admin tool — no config files needed.
+
+## Commands & Keybinds
+
+| Command | Default Key | Description |
+|---------|-------------|-------------|
+| `/missions` | F6 | Toggle the missions tracker panel |
+| `/missionadmin` | — | Open the admin mission editor (requires permission) |
+
+Commands, keybind, and the required admin permission are all configurable in `shared/config.lua`.
+
+## Configuration
+
+All settings live in `shared/config.lua`:
+
+```lua
+Config = {
+    EnableNuiCommand = false,        -- Dev: allow /nui to toggle the panel
+    npcBlips = true,                 -- Show blips for mission NPCs
+    npcBlipSprite = 280,             -- Blip sprite ID
+    npcBlipColor = 29,               -- Blip color ID
+    npcBlipScale = 0.7,              -- Blip scale
+    maxNpcBlips = 10,                -- Max NPC blips on the map
+    dailyMissionLimit = 20,          -- Max completions per character per day
+    sidebarPosition = 'left',        -- NUI panel position: 'left' or 'right'
+    adminPermission = 'command.missionadmin',
+
+    commands = {
+        missions = 'missions',       -- Player command name
+        missionadmin = 'missionadmin', -- Admin command name
+    },
+    keybind = 'F6',
+    keybindDescription = 'Toggle Missions Tracker',
+
+    strings = { ... },               -- All player-facing strings (override to localize)
+}
 ```
-npm install -g pnpm
-```
 
-### Setup
+### Localization
 
-Initialise your own repository by using one of the options below.
+Every player-facing string (notifications, HUD text, NUI labels, button text) is defined in `Config.strings`. Override any value to translate or rebrand.
 
-- [Create a new repository](https://github.com/new?template_name=fivem-typescript-boilerplate&template_owner=communityox) using this template.
-- [Download](https://github.com/communityox/fivem-typescript-boilerplate/archive/refs/heads/main.zip) the template directly.
-- Use the [GitHub CLI](https://cli.github.com/).
-  - `gh repo create <name> --template=communityox/fivem-typescript-boilerplate`
+## Building the NUI
 
-Navigate to your new directory and execute the following command to install dependencies.
+The NUI is a React app built with Vite. You only need to rebuild if you modify files under `web/`.
 
-```
+```bash
 pnpm install
+pnpm build        # Production build → dist/web/
+pnpm web:dev      # Dev server with hot reload
 ```
 
-## Development
+Requires Node.js 18+ and pnpm.
 
-Use `pnpm watch` to actively rebuild modified files while developing the resource.
+## Project Structure
 
-During web development, use `pnpm web:dev` to start vite's webserver and watch for changes.
+```
+fish_missions/
+├── shared/           # Config and shared helpers
+├── client/
+│   ├── helpers.lua   # Client namespace (Client = {})
+│   ├── lifecycle.lua # State management, commands, keybinds
+│   ├── npc.lua       # NPC spawning, ox_target, blips
+│   ├── nui.lua       # NUI callbacks and server event handlers
+│   ├── admin/        # Admin tool (placement, prop adjustment)
+│   └── missions/     # Mission type handlers (cleanup, delivery, assassination)
+├── server/
+│   ├── helpers.lua   # Server namespace (Server = {})
+│   ├── db.lua        # Database queries
+│   ├── rewards.lua   # XP, daily tracking, reward granting
+│   ├── tracker.lua   # Mission tracker state builder
+│   ├── missions.lua  # Accept/complete/claim/cancel handlers
+│   ├── lifecycle.lua # Character lifecycle and hydration
+│   ├── admin.lua     # Admin CRUD operations
+│   └── init.lua      # SQL setup and mission loading
+├── web/              # React NUI (Vite + Mantine v8)
+├── dist/web/         # Built NUI output
+└── fxmanifest.lua
+```
 
-## Build
+## Releases
 
-Use `pnpm build` to build all project files in production mode.
+Tag a commit (e.g. `v1.0.0`) and push — GitHub Actions will build the NUI and create a release zip automatically.
 
-To build and create GitHub releases, tag your commit (e.g. `v1.0.0`) and push it.
+## License
 
-## Layout
-
-- [/dist/](dist)
-  - Compiled project files.
-- [/locales/](locales)
-  - JSON files used for translations with [ox_lib](https://coxdocs.dev/ox_lib/Modules/Locale/Shared).
-- [/scripts/](scripts)
-  - Scripts used in the development process, but not part of the compiled resource.
-- [/src/](src)
-  - Project source code.
-- [/static/](static)
-  - Files to include with the resource that aren't compiled or loaded (e.g. config).
+MIT

@@ -1,4 +1,5 @@
 import {
+  Accordion,
   ActionIcon,
   Button,
   Group,
@@ -43,77 +44,183 @@ export function TypeParamsEditor({ errors }: TypeParamsEditorProps) {
 
   const params = editing.params || {};
 
-  const startPlacement = async (field: string, model: string, entityType: 'ped' | 'prop') => {
+  const startPlacement = async (
+    field: string,
+    model: string,
+    entityType: 'ped' | 'prop',
+    contextEntities?: Array<{ model: string; coords: { x: number; y: number; z: number }; heading?: number; entityType: 'ped' | 'prop' }>,
+  ) => {
     if (!model) return;
     setCapturingField(field);
-    const result = await fetchNui<{ ok: boolean; reason?: string }>('admin:startPlacement', { field, model, entityType });
+    const result = await fetchNui<{ ok: boolean; reason?: string }>('admin:startPlacement', { field, model, entityType, contextEntities });
     if (result && !result.ok) {
       setCapturingField(null);
     }
   };
 
   if (editing.type === 'cleanup') {
-    const props: Array<{ model: string; coords: { x: number; y: number; z: number } }> = params.props || [];
+    const propGroups: Array<{
+      label: string;
+      props: Array<{ model: string; coords: { x: number; y: number; z: number } }>;
+      randomize?: boolean;
+      randomCount?: number;
+    }> = params.propGroups || [];
 
-    const addProp = () => {
-      updateParams({ props: [...props, { model: 'prop_beer_bottle', coords: { x: 0, y: 0, z: 0 } }] });
+    // Migration: show legacy props as a single group if no propGroups exist yet
+    const hasLegacy = (!propGroups.length && params.props?.length);
+
+    const effectiveGroups: typeof propGroups = hasLegacy
+      ? [{ label: params.itemLabel || 'Items', props: params.props || [] }]
+      : propGroups;
+
+    const commitGroups = (updated: typeof effectiveGroups) => {
+      updateParams({ propGroups: updated, props: undefined, itemLabel: undefined });
     };
 
-    const removeProp = (idx: number) => {
-      updateParams({ props: props.filter((_, i) => i !== idx) });
+    const addGroup = () => {
+      commitGroups([...effectiveGroups, { label: '', props: [{ model: 'prop_beer_bottle', coords: { x: 0, y: 0, z: 0 } }] }]);
     };
 
-    const updateProp = (idx: number, partial: Record<string, any>) => {
-      const updated = [...props];
-      updated[idx] = { ...updated[idx], ...partial };
-      updateParams({ props: updated });
+    const removeGroup = (gi: number) => {
+      commitGroups(effectiveGroups.filter((_, i) => i !== gi));
     };
 
-    const updatePropCoords = (idx: number, partial: Record<string, number>) => {
-      const updated = [...props];
-      updated[idx] = { ...updated[idx], coords: { ...updated[idx].coords, ...partial } };
-      updateParams({ props: updated });
+    const updateGroup = (gi: number, partial: Record<string, unknown>) => {
+      const updated = [...effectiveGroups];
+      updated[gi] = { ...updated[gi], ...partial };
+      commitGroups(updated);
     };
+
+    const addProp = (gi: number) => {
+      const updated = [...effectiveGroups];
+      updated[gi] = { ...updated[gi], props: [...(updated[gi].props || []), { model: 'prop_beer_bottle', coords: { x: 0, y: 0, z: 0 } }] };
+      commitGroups(updated);
+    };
+
+    const removeProp = (gi: number, pi: number) => {
+      const updated = [...effectiveGroups];
+      updated[gi] = { ...updated[gi], props: updated[gi].props.filter((_: any, i: number) => i !== pi) };
+      commitGroups(updated);
+    };
+
+    const updateProp = (gi: number, pi: number, partial: Record<string, unknown>) => {
+      const updated = [...effectiveGroups];
+      const props = [...updated[gi].props];
+      props[pi] = { ...props[pi], ...partial };
+      updated[gi] = { ...updated[gi], props };
+      commitGroups(updated);
+    };
+
+    const updatePropCoords = (gi: number, pi: number, partial: Record<string, number>) => {
+      const updated = [...effectiveGroups];
+      const props = [...updated[gi].props];
+      props[pi] = { ...props[pi], coords: { ...props[pi].coords, ...partial } };
+      updated[gi] = { ...updated[gi], props };
+      commitGroups(updated);
+    };
+
+    const hasNonZeroCoords = (c: { x: number; y: number; z: number }) => c.x !== 0 || c.y !== 0 || c.z !== 0;
 
     return (
       <Stack gap="xs">
         <TextInput
           label="Item Label"
           placeholder="e.g. trash bag"
-          value={params.itemLabel || ''}
+          value={params.itemLabel || effectiveGroups[0]?.label || ''}
           onChange={(e) => updateParams({ itemLabel: e.currentTarget.value })}
           size="xs"
         />
-        <Text size="xs" fw={500}>Props ({props.length})</Text>
         {errors['params.props'] && <Text size="xs" c="red">{errors['params.props']}</Text>}
-        {props.map((prop, idx) => (
-          <Stack key={idx} gap={4} style={{ padding: '8px', borderRadius: 4, background: 'rgba(40, 40, 60, 0.3)' }}>
-            <Group gap="xs">
-              <TextInput
-                placeholder="Prop model"
-                value={prop.model}
-                onChange={(e) => updateProp(idx, { model: e.currentTarget.value })}
-                style={{ flex: 1 }}
-                size="xs"
-              />
-              <ActionIcon size="sm" color="red" variant="subtle" onClick={() => removeProp(idx)}>✕</ActionIcon>
-            </Group>
-            <Group grow gap="xs">
-              <NumberInput label="X" value={prop.coords.x} onChange={(v) => updatePropCoords(idx, { x: round2(Number(v) || 0) })} step={0.01} decimalScale={2} size="xs" />
-              <NumberInput label="Y" value={prop.coords.y} onChange={(v) => updatePropCoords(idx, { y: round2(Number(v) || 0) })} step={0.01} decimalScale={2} size="xs" />
-              <NumberInput label="Z" value={prop.coords.z} onChange={(v) => updatePropCoords(idx, { z: round2(Number(v) || 0) })} step={0.01} decimalScale={2} size="xs" />
-            </Group>
-            <Button
-              size="xs"
-              variant="subtle"
-              disabled={!prop.model}
-              onClick={() => startPlacement(`prop_${idx}`, prop.model, 'prop')}
-            >
-              Place Prop
-            </Button>
-          </Stack>
-        ))}
-        <Button size="xs" variant="subtle" onClick={addProp}>+ Add Prop</Button>
+
+        <Text size="xs" fw={500}>Prop Groups ({effectiveGroups.length})</Text>
+
+        <Accordion variant="separated" chevronPosition="left" styles={{ item: { background: 'rgba(40, 40, 60, 0.3)', border: 'none' }, content: { padding: '6px 8px' } }}>
+          {effectiveGroups.map((group, gi) => {
+            const totalProps = group.props.length;
+            const displayCount = group.randomize && group.randomCount
+              ? `${Math.min(group.randomCount, totalProps)} of ${totalProps}`
+              : String(totalProps);
+
+            return (
+              <Accordion.Item key={gi} value={String(gi)}>
+                <Accordion.Control>
+                  <Group justify="space-between" wrap="nowrap" gap={4}>
+                    <Text size="xs" fw={500}>{group.label || `Group ${gi + 1}`} ({displayCount} props)</Text>
+                    <ActionIcon size="sm" color="red" variant="subtle" onClick={(e) => { e.stopPropagation(); removeGroup(gi); }}>✕</ActionIcon>
+                  </Group>
+                </Accordion.Control>
+                <Accordion.Panel>
+                  <Stack gap="xs">
+                    <TextInput
+                      label="Group Label"
+                      placeholder="e.g. Beer Bottles"
+                      value={group.label}
+                      onChange={(e) => updateGroup(gi, { label: e.currentTarget.value })}
+                      size="xs"
+                    />
+
+                    <Switch
+                      label="Random Selection"
+                      description={group.randomize ? `Spawns ${group.randomCount || 1} of ${totalProps} placed props per mission run` : undefined}
+                      checked={!!group.randomize}
+                      onChange={(e) => updateGroup(gi, { randomize: e.currentTarget.checked, randomCount: e.currentTarget.checked ? Math.max(1, Math.ceil(totalProps / 2)) : undefined })}
+                      size="xs"
+                    />
+
+                    {group.randomize && (
+                      <NumberInput
+                        label="Spawn Count"
+                        value={group.randomCount || 1}
+                        onChange={(v) => updateGroup(gi, { randomCount: Math.max(1, Math.min(Number(v) || 1, totalProps)) })}
+                        min={1}
+                        max={totalProps || 1}
+                        size="xs"
+                      />
+                    )}
+
+                    <Stack gap="xs">
+                      {group.props.map((prop, pi) => (
+                        <Stack key={pi} gap={4} style={{ padding: '6px', borderRadius: 4, background: 'rgba(30, 30, 50, 0.3)' }}>
+                          <Group gap="xs">
+                            <TextInput
+                              placeholder="Prop model"
+                              value={prop.model}
+                              onChange={(e) => updateProp(gi, pi, { model: e.currentTarget.value })}
+                              style={{ flex: 1 }}
+                              size="xs"
+                            />
+                            <ActionIcon size="sm" color="red" variant="subtle" onClick={() => removeProp(gi, pi)}>✕</ActionIcon>
+                          </Group>
+                          <Group grow gap="xs">
+                            <NumberInput label="X" value={prop.coords.x} onChange={(v) => updatePropCoords(gi, pi, { x: round2(Number(v) || 0) })} step={0.01} decimalScale={2} size="xs" />
+                            <NumberInput label="Y" value={prop.coords.y} onChange={(v) => updatePropCoords(gi, pi, { y: round2(Number(v) || 0) })} step={0.01} decimalScale={2} size="xs" />
+                            <NumberInput label="Z" value={prop.coords.z} onChange={(v) => updatePropCoords(gi, pi, { z: round2(Number(v) || 0) })} step={0.01} decimalScale={2} size="xs" />
+                          </Group>
+                          <Button
+                            size="xs"
+                            variant="subtle"
+                            disabled={!prop.model}
+                            onClick={() => {
+                              const ctx = group.props
+                                .filter((_: any, i: number) => i !== pi && hasNonZeroCoords(_.coords))
+                                .map((p: any) => ({ model: p.model, coords: p.coords, entityType: 'prop' as const }));
+                              startPlacement(`gprop_${gi}_${pi}`, prop.model, 'prop', ctx.length ? ctx : undefined);
+                            }}
+                          >
+                            Place Prop
+                          </Button>
+                        </Stack>
+                      ))}
+                      <Button size="xs" variant="subtle" onClick={() => addProp(gi)}>+ Add Prop</Button>
+                    </Stack>
+                  </Stack>
+                </Accordion.Panel>
+              </Accordion.Item>
+            );
+          })}
+        </Accordion>
+
+        <Button size="xs" variant="subtle" onClick={addGroup}>+ Add Prop Group</Button>
       </Stack>
     );
   }
@@ -245,6 +352,8 @@ export function TypeParamsEditor({ errors }: TypeParamsEditorProps) {
       updateParams({ targets: updated });
     };
 
+    const hasNonZeroCoords = (c: { x: number; y: number; z: number }) => c.x !== 0 || c.y !== 0 || c.z !== 0;
+
     return (
       <Stack gap="xs">
         <Switch
@@ -305,7 +414,12 @@ export function TypeParamsEditor({ errors }: TypeParamsEditorProps) {
               size="xs"
               variant="subtle"
               disabled={!target.model}
-              onClick={() => startPlacement(`target_${idx}`, target.model, 'ped')}
+              onClick={() => {
+                const ctx = targets
+                  .filter((_: any, i: number) => i !== idx && hasNonZeroCoords(_.coords))
+                  .map((t: any) => ({ model: t.model, coords: t.coords, heading: t.coords.w, entityType: 'ped' as const }));
+                startPlacement(`target_${idx}`, target.model, 'ped', ctx.length ? ctx : undefined);
+              }}
             >
               Place Target
             </Button>

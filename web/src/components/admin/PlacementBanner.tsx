@@ -1,4 +1,3 @@
-import { Paper, Text } from '@mantine/core';
 import { useAdminStore } from '../../stores/adminStore';
 import { useNuiEvent } from '../../hooks/useNuiEvent';
 
@@ -31,7 +30,20 @@ export function PlacementBanner() {
       updateParams({
         destination: { x: pos.x, y: pos.y, z: pos.z },
       });
+    } else if (pos.field.startsWith('gprop_')) {
+      // Group-aware prop: gprop_{groupIdx}_{propIdx}
+      const parts = pos.field.split('_');
+      const gi = parseInt(parts[1], 10);
+      const pi = parseInt(parts[2], 10);
+      const propGroups = [...(editing.params?.propGroups || [])];
+      if (propGroups[gi]?.props?.[pi]) {
+        const props = [...propGroups[gi].props];
+        props[pi] = { ...props[pi], coords: { x: pos.x, y: pos.y, z: pos.z } };
+        propGroups[gi] = { ...propGroups[gi], props };
+        updateParams({ propGroups });
+      }
     } else if (pos.field.startsWith('prop_')) {
+      // Legacy flat prop: prop_{idx}
       const idx = parseInt(pos.field.split('_')[1], 10);
       const props = [...(editing.params?.props || [])];
       if (props[idx]) {
@@ -67,29 +79,6 @@ export function PlacementBanner() {
     useAdminStore.getState().setCapturingField(null);
   });
 
-  if (!capturingField) return null;
-  if (capturingField === 'propAdjust') return null;
-
-  const bannerText = `Placing: ${capturingField} — [E] to confirm · [Scroll] to rotate · [Backspace] to cancel`;
-
-  return (
-    <Paper
-      shadow="lg"
-      p="sm"
-      style={{
-        position: 'fixed',
-        top: 16,
-        left: '50%',
-        transform: 'translateX(-50%)',
-        zIndex: 3000,
-        background: 'rgba(30, 30, 40, 0.95)',
-        border: '1px solid rgba(80, 120, 200, 0.6)',
-        pointerEvents: 'none',
-      }}
-    >
-      <Text size="sm" c="white" fw={600} ta="center">
-        {bannerText}
-      </Text>
-    </Paper>
-  );
+  // Visual banner removed — ox lib.showTextUI handles placement instructions
+  return null;
 }

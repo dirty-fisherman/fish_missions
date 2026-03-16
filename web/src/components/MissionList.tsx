@@ -2,13 +2,22 @@ import { useMemo, useState } from 'react';
 import { Badge, Box, Group, ScrollArea, Stack, Tabs, Text, TextInput } from '@mantine/core';
 import { IconSearch } from './icons';
 import { useMissionStore, type Mission } from '../stores/missionStore';
+import { useStr } from '../utils/useStr';
 
-const statusBadge: Record<string, { label: string; color: string }> = {
-  'in-progress': { label: 'in progress', color: 'blue' },
-  complete: { label: 'complete', color: 'green' },
-  turnin: { label: 'complete', color: 'green' },
-  cooldown: { label: 'on cooldown', color: 'gray' },
-  cancelled: { label: 'cancelled', color: 'red' },
+const statusColors: Record<string, string> = {
+  'in-progress': 'blue',
+  complete: 'green',
+  turnin: 'green',
+  cooldown: 'gray',
+  cancelled: 'red',
+};
+
+const statusStringKey: Record<string, string> = {
+  'in-progress': 'status_active',
+  complete: 'status_complete',
+  turnin: 'status_complete',
+  cooldown: 'status_cooldown',
+  cancelled: 'status_cancelled',
 };
 
 type TabKey = 'available' | 'archived';
@@ -17,6 +26,21 @@ const ARCHIVED_STATUSES = new Set(['cooldown', 'archived', 'cancelled']);
 
 export function MissionList() {
   const { discoveredMissions, selectedMission, getStatusById, selectMissionFromList } = useMissionStore();
+  const tabAvailable = useStr('tab_available');
+  const tabArchived = useStr('tab_archived');
+  const filterPlaceholder = useStr('filter_placeholder');
+  const emptyAvailable = useStr('empty_available');
+  const emptyFilter = useStr('empty_filter');
+  const strStatusActive = useStr('status_active');
+  const strStatusComplete = useStr('status_complete');
+  const strStatusCooldown = useStr('status_cooldown');
+  const strStatusCancelled = useStr('status_cancelled');
+  const statusLabels: Record<string, string> = {
+    status_active: strStatusActive,
+    status_complete: strStatusComplete,
+    status_cooldown: strStatusCooldown,
+    status_cancelled: strStatusCancelled,
+  };
   const [tab, setTab] = useState<TabKey>('available');
   const [filter, setFilter] = useState('');
 
@@ -63,9 +87,9 @@ export function MissionList() {
               <Text size="xs" c="dimmed" mt={1}>{status.progress.completed} / {status.progress.total}</Text>
             )}
           </Box>
-          {status?.status && statusBadge[status.status] && (
-            <Badge variant="dot" color={statusBadge[status.status].color} size="xs" style={{ flexShrink: 0 }}>
-              {statusBadge[status.status].label}
+          {status?.status && statusColors[status.status] && (
+            <Badge variant="dot" color={statusColors[status.status]} size="xs" style={{ flexShrink: 0 }}>
+              {statusLabels[statusStringKey[status.status]] ?? status.status}
             </Badge>
           )}
         </Group>
@@ -91,13 +115,13 @@ export function MissionList() {
         }}
       >
         <Tabs.List grow>
-          <Tabs.Tab value="available">Available{tabCount('available')}</Tabs.Tab>
-          <Tabs.Tab value="archived">Archived{tabCount('archived')}</Tabs.Tab>
+          <Tabs.Tab value="available">{tabAvailable}{tabCount('available')}</Tabs.Tab>
+          <Tabs.Tab value="archived">{tabArchived}{tabCount('archived')}</Tabs.Tab>
         </Tabs.List>
       </Tabs>
 
       <TextInput
-        placeholder="Filter missions…"
+        placeholder={filterPlaceholder}
         size="sm"
         leftSection={<IconSearch />}
         value={filter}
@@ -109,8 +133,8 @@ export function MissionList() {
         {filtered.length === 0 ? (
           <Text size="sm" c="dimmed" ta="center" py="md">
             {discoveredMissions.length === 0
-              ? 'Accept missions to add them here.'
-              : 'No missions match your filter.'}
+              ? emptyAvailable
+              : emptyFilter}
           </Text>
         ) : (
           <Stack gap={2}>{filtered.map(renderItem)}</Stack>

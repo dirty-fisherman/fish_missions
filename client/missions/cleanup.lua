@@ -1,15 +1,58 @@
--- Cleanup mission module: zone-based prop spawning, pickup tracking
+-- Cleanup mission module: per-group prop spawning with optional random selection
 
 Missions = Missions or {}
 
-local spawned = {}       -- [index] = entity handle
-local collected = {}     -- [index] = true
+-- ── Seeded PRNG (deterministic across clients) ─────────────────────────────
+-- Simple xorshift32 — fast, 32-bit, same output for same seed everywhere.
+
+local function xorshift32(state)
+    local s = state
+    s = s ~ (s << 13)
+    s = s ~ (s >> 17)
+    s = s ~ (s << 5)
+    -- keep within 32-bit unsigned range
+    s = s & 0xFFFFFFFF
+    return s
+end
+
+--- Return an integer in [0, max) from a seed state, advancing the state.
+local function rngInt(state, max)
+    state = xorshift32(state)
+    return state, (state % max)
+end
+
+--- Select `count` items from `allProps` using a seeded Fisher-Yates shuffle.
+--- Returns a new array with the selected subset (deterministic for same seed).
+local function selectRandomSubset(allProps, count, seed)
+    local n = #allProps
+    if count >= n then return allProps end
+    -- Build index array
+    local indices = {}
+    for i = 1, n do indices[i] = i end
+    -- Partial Fisher-Yates: shuffle first `count` positions
+    local state = seed
+    for i = 1, count do
+        local j
+        state, j = rngInt(state, n - i + 1)
+        j = j + i -- range [i, n]
+        indices[i], indices[j] = indices[j], indices[i]
+    end
+    -- Collect selected props
+    local selected = {}
+    for i = 1, count do
+        selected[i] = allProps[indices[i]]
+    end
+    return selected
+end
+
+-- ── Module state ────────────────────────────────────────────────────────────
+
+local spawned = {}       -- [flatIndex] = entity handle
+local collected = {}     -- [flatIndex] = true
 local remaining = 0
 local total = 0
-local missionBlips = nil
-local activeZone = nil
+local groups = {}        -- [groupIdx] = { startIdx, endIdx, zone, blips, propsSpawned, props }
 local activeMission = nil
-local propsSpawned = false
 
 local function loadModel(model)
     local hash = type(model) == 'string' and joaat(model) or model
@@ -23,20 +66,24 @@ local function loadModel(model)
     return HasModelLoaded(hash)
 end
 
-local function despawnProps()
-    if not propsSpawned then return end
-    for i, obj in pairs(spawned) do
-        if DoesEntityExist(obj) then
-            exports.ox_target:removeLocalEntity(obj)
+-- ── Per-group spawn/despawn ─────────────────────────────────────────────────
+
+local function despawnGroup(g)
+    if not g.propsSpawned then return end
+    for i = g.startIdx, g.endIdx do
+        local obj = spawned[i]
+        if obj and DoesEntityExist(obj) then
+            pcall(exports.ox_target.removeLocalEntity, exports.ox_target, obj)
+            SetEntityAsMissionEntity(obj, true, true)
             DeleteObject(obj)
         end
         spawned[i] = nil
     end
-    propsSpawned = false
+    g.propsSpawned = false
 end
 
 local function collect(index, obj, mission)
-    exports.ox_target:removeLocalEntity(obj)
+    pcall(exports.ox_target.removeLocalEntity, exports.ox_target, obj)
     SetEntityAsMissionEntity(obj, true, true)
     DeleteObject(obj)
 
@@ -57,37 +104,39 @@ local function collect(index, obj, mission)
     if mission.messages and mission.messages.pickup then
         msg = mission.messages.pickup
     elseif total > 1 then
-        msg = ('Collected %d/%d %s'):format(completed, total, label)
+        msg = Config.strings.cleanup_collected_format:format(completed, total, label)
     else
-        msg = 'Collected ' .. label
+        msg = Config.strings.cleanup_collected_single:format(label)
     end
     lib.notify({ title = mission.label or 'Cleanup', description = msg, type = 'info' })
 
     if remaining <= 0 then
-        despawnProps()
-        RemoveMissionBlips(missionBlips)
-        missionBlips = nil
-        if activeZone then
-            activeZone:remove()
-            activeZone = nil
+        -- Mission complete — clean up all groups
+        for _, g in ipairs(groups) do
+            despawnGroup(g)
+            Client.RemoveMissionBlips(g.blips)
+            if g.zone then g.zone:remove() end
         end
+        groups = {}
         activeMission = nil
         TriggerServerEvent(ResourceName .. ':mission:complete', { missionId = mission.id })
     end
 end
 
-local function spawnProps(mission)
-    if propsSpawned then return end
-    propsSpawned = true
+local function spawnGroupProps(g, mission)
+    if g.propsSpawned then return end
+    g.propsSpawned = true
 
-    local props = mission.params.props
-    for i, prop in ipairs(props) do
+    for i = g.startIdx, g.endIdx do
         if not collected[i] then
+            local prop = g.props[i - g.startIdx + 1]
             loadModel(prop.model)
             local coords = prop.coords
             local obj = CreateObject(joaat(prop.model), coords.x, coords.y, coords.z, false, true, false)
+            SetEntityAsMissionEntity(obj, true, true)
             PlaceObjectOnGroundProperly(obj)
             FreezeEntityPosition(obj, true)
+            SetEntityInvincible(obj, true)
             spawned[i] = obj
 
             local enc = mission
@@ -97,7 +146,7 @@ local function spawnProps(mission)
                 {
                     name = ('%s:pickup:%d'):format(mission.id, i),
                     icon = 'fa-solid fa-hand',
-                    label = 'Pick up',
+                    label = Config.strings.pickup_label,
                     onSelect = function()
                         collect(idx, objRef, enc)
                     end,
@@ -107,7 +156,8 @@ local function spawnProps(mission)
     end
 end
 
---- Calculate center and bounding radius from prop positions.
+-- ── Zone calculation ────────────────────────────────────────────────────────
+
 local function calculateZone(props)
     local cx, cy, cz = 0, 0, 0
     local n = #props
@@ -120,9 +170,6 @@ local function calculateZone(props)
 
     local maxDist = 0
     for _, prop in ipairs(props) do
-        -- Explicitly construct vec3 so arithmetic works for both native vec3
-        -- values (from Config.missions) and plain {x,y,z} tables (admin-created
-        -- missions that weren't in config at load time).
         local pc = vec3(prop.coords.x, prop.coords.y, prop.coords.z)
         local dist = #(center - pc)
         if dist > maxDist then maxDist = dist end
@@ -131,76 +178,122 @@ local function calculateZone(props)
     return center, math.max(50.0, maxDist + 30.0)
 end
 
+-- ── Normalize mission data into propGroups ──────────────────────────────────
+-- Returns per-group: allProps (full set for zone calculation) and
+-- activeProps (subset to actually spawn, after random selection).
+
+local function resolveGroups(mission)
+    local params = mission.params or {}
+    local runtimeSeed = mission.runtimeSeed or 12345
+    if params.propGroups and #params.propGroups > 0 then
+        local resolved = {}
+        for gi, group in ipairs(params.propGroups) do
+            local allProps = group.props or {}
+            local activeProps = allProps
+            if group.randomize and group.randomCount and group.randomCount < #allProps then
+                -- Use runtimeSeed + group index for per-group determinism
+                activeProps = selectRandomSubset(allProps, group.randomCount, runtimeSeed + gi)
+            end
+            resolved[gi] = {
+                label = group.label,
+                allProps = allProps,
+                activeProps = activeProps,
+            }
+        end
+        return resolved
+    end
+    -- Legacy: wrap flat props in a single group
+    if params.props and #params.props > 0 then
+        local props = params.props
+        return { { label = params.itemLabel or 'Items', allProps = props, activeProps = props } }
+    end
+    return {}
+end
+
+-- ── Start / stop / progress ─────────────────────────────────────────────────
+
 local function start(mission)
-    -- Reset module state so restarts after natural completion work correctly.
-    -- (Natural completion via collect() cleans up blips/zone but does NOT
-    -- reset collected/spawned/remaining/total — only stop() does that.)
+    -- Reset
     collected = {}
     spawned = {}
     remaining = 0
     total = 0
-    propsSpawned = false
+    groups = {}
 
-    -- Use local config for proper vector types (network serialization strips them)
-    for _, enc in ipairs(Config.missions) do
-        if enc.id == mission.id then
-            mission = enc
-            break
+    local resolved = resolveGroups(mission)
+    if #resolved == 0 then return end
+
+    activeMission = mission
+    local flatIdx = 1
+
+    for gi, rg in ipairs(resolved) do
+        local activeProps = rg.activeProps
+        local allProps = rg.allProps
+        local startIdx = flatIdx
+        local endIdx = flatIdx + #activeProps - 1
+
+        -- Use ALL props for zone calculation so the radius covers every
+        -- potential placement, not just the randomly-selected subset.
+        local center, radius = calculateZone(allProps)
+
+        local blips = Client.CreateMissionBlips({
+            location = center,
+            label = (rg.label and rg.label ~= '') and (mission.label .. ' — ' .. rg.label) or mission.label,
+            area = center,
+            radius = radius,
+        })
+
+        local g = {
+            startIdx = startIdx,
+            endIdx = endIdx,
+            props = activeProps,
+            blips = blips,
+            propsSpawned = false,
+            zone = nil,
+        }
+
+        g.zone = lib.zones.sphere({
+            coords = center,
+            radius = radius,
+            onEnter = function()
+                if activeMission then
+                    spawnGroupProps(g, activeMission)
+                end
+            end,
+            onExit = function()
+                despawnGroup(g)
+            end,
+        })
+
+        groups[gi] = g
+        total = total + #activeProps
+        flatIdx = endIdx + 1
+
+        -- If player already inside this group's zone, spawn immediately
+        if #(GetEntityCoords(cache.ped) - center) < radius then
+            spawnGroupProps(g, mission)
         end
     end
 
-    local props = mission.params.props
-    total = #props
-
-    local numCollected = 0
-    for _ in pairs(collected) do numCollected = numCollected + 1 end
-    remaining = total - numCollected
-
-    if remaining <= 0 then return end
-
-    activeMission = mission
-    local center, radius = calculateZone(props)
-
-    missionBlips = CreateMissionBlips({
-        location = center,
-        label = mission.label,
-        area = center,
-        radius = radius,
-    })
-
-    activeZone = lib.zones.sphere({
-        coords = center,
-        radius = radius,
-        onEnter = function()
-            if activeMission then
-                spawnProps(activeMission)
-            end
-        end,
-        onExit = function()
-            despawnProps()
-        end,
-    })
-
-    -- If player is already inside the zone, spawn immediately
-    if #(GetEntityCoords(cache.ped) - center) < radius then
-        spawnProps(mission)
+    remaining = total
+    -- Apply any previously-set progress (setProgress may have run before start)
+    for i in pairs(collected) do
+        remaining = remaining - 1
     end
 end
 
 local function stop()
-    despawnProps()
-    if activeZone then
-        activeZone:remove()
-        activeZone = nil
+    for _, g in ipairs(groups) do
+        despawnGroup(g)
+        Client.RemoveMissionBlips(g.blips)
+        if g.zone then g.zone:remove() end
     end
-    RemoveMissionBlips(missionBlips)
-    missionBlips = nil
+    groups = {}
     spawned = {}
     collected = {}
     remaining = 0
     total = 0
     activeMission = nil
-    propsSpawned = false
 end
 
 local function setProgress(progress)

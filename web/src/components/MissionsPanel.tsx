@@ -1,8 +1,10 @@
-import { ActionIcon, Paper, Title, Transition } from '@mantine/core';
+import { ActionIcon, Button, Paper, Title, Transition } from '@mantine/core';
 import { IconX } from './icons';
 import { MissionCard } from './MissionCard';
 import { MissionList } from './MissionList';
 import { useMissionStore } from '../stores/missionStore';
+import { fetchNui } from '../utils/fetchNui';
+import { useStr } from '../utils/useStr';
 
 interface MissionsPanelProps {
   isVisible: boolean;
@@ -11,6 +13,9 @@ interface MissionsPanelProps {
 
 export function MissionsPanel({ isVisible, onClose }: MissionsPanelProps) {
   const sidebarPosition = useMissionStore((s) => s.sidebarPosition);
+  const isAdmin = useMissionStore((s) => s.isAdmin);
+  const panelTitle = useStr('panel_title');
+  const adminLabel = useStr('btn_admin');
   const isLeft = sidebarPosition === 'left';
 
   return (
@@ -43,7 +48,7 @@ export function MissionsPanel({ isVisible, onClose }: MissionsPanelProps) {
             }}
           >
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-              <Title order={3} c="dimmed" fw={700}>Missions</Title>
+              <Title order={3} c="dimmed" fw={700}>{panelTitle}</Title>
               <ActionIcon variant="subtle" color="gray" onClick={onClose} size="sm">
                 <IconX />
               </ActionIcon>
@@ -51,6 +56,18 @@ export function MissionsPanel({ isVisible, onClose }: MissionsPanelProps) {
 
             <MissionCard onClose={onClose} />
             <MissionList />
+            {isAdmin && (
+              <Button
+                variant="subtle"
+                color="gray"
+                size="xs"
+                fullWidth
+                onClick={() => void fetchNui('panel:openAdmin', {})}
+                style={{ flexShrink: 0 }}
+              >
+                {adminLabel}
+              </Button>
+            )}
           </Paper>
         )}
       </Transition>

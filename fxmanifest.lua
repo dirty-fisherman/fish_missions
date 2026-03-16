@@ -25,14 +25,27 @@ dependencies {
 shared_scripts {
 	'@ox_lib/init.lua',
 	'shared/config.lua',
+	'shared/helpers.lua',
 }
 
 client_scripts {
-	'client/main.lua',
+	'client/helpers.lua',
+	'client/lifecycle.lua',
+	'client/npc.lua',
+	'client/nui.lua',
+	'client/admin/*.lua',
 	'client/missions/*.lua',
 }
 
 server_scripts {
 	'@oxmysql/lib/MySQL.lua',
-	'server/main.lua',
+	'server/helpers.lua',
+	'server/db.lua',
+	'server/rewards.lua',
+	'server/tracker.lua',
+	'server/missions.lua',
+	'server/lifecycle.lua',
+	'server/assassination.lua',
+	'server/admin.lua',
+	'server/init.lua',
 }

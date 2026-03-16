@@ -17,6 +17,10 @@ function App() {
   const resetAdmin = useAdminStore((s) => s.reset);
 
   function handleClose() {
+    if (adminMode === 'admin') {
+      void fetchNui('admin:close', {});
+      resetAdmin();
+    }
     closePanel();
     void fetchNui('focus:set', { hasFocus: false, hasCursor: false });
   }
@@ -34,9 +38,10 @@ function App() {
 
   useNuiEvent('admin:closed', () => {
     resetAdmin();
+    closePanel();
   });
 
-  useKeyboardHandlers(panelVisible, handleClose);
+  useKeyboardHandlers(panelVisible || adminMode === 'admin', handleClose);
   useMissionEvents(handleClose);
 
   if (adminMode === 'admin') {

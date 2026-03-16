@@ -39,7 +39,7 @@ export function useMissionEvents(onClose: () => void) {
     }
   });
   
-  useNuiEvent('tracker:data', (data: { statuses: any[], discoveredMissions?: any[], config?: { sidebarPosition?: 'left' | 'right' } }) => {
+  useNuiEvent('tracker:data', (data: { statuses: any[], discoveredMissions?: any[], config?: { sidebarPosition?: 'left' | 'right' }, strings?: Record<string, string>, isAdmin?: boolean }) => {
     setMissionStatuses(data.statuses || []);
     if (data.discoveredMissions) {
       setDiscoveredMissions(data.discoveredMissions);
@@ -47,5 +47,9 @@ export function useMissionEvents(onClose: () => void) {
     if (data.config?.sidebarPosition) {
       useMissionStore.getState().setSidebarPosition(data.config.sidebarPosition);
     }
+    if (data.strings) {
+      useMissionStore.setState({ strings: data.strings });
+    }
+    useMissionStore.setState({ isAdmin: !!data.isAdmin });
   });
 }

@@ -13,144 +13,55 @@ Config = {
     adminPermission = 'command.missionadmin',
     characterSelectedEvent = 'ox:setActiveCharacter',
     characterDeselectedEvent = 'ox:playerLogout',
-    seedMissions = true, -- Set to false to prevent example missions from being inserted on startup
 
-    missions = {
-        {
-            id = 'cleanup_beach',
-            label = 'Beach Cleanup',
-            description = 'Some dirty bastard has chucked about a load of bin bags around the beach! Can you help me clear them up?',
-            type = 'cleanup',
-            cooldownSeconds = 10,
-            npc = {
-                id = 'beach_keeper',
-                model = 'S_F_Y_Baywatch_01',
-                coords = vec4(-1605.68, -1111.22, 2.32, 130.0),
-                scenario = 'WORLD_HUMAN_CLIPBOARD',
-                target = { icon = 'fa-solid fa-recycle', label = 'Help Stranger' },
-                blip = { sprite = 317, color = 3, scale = 0.7 },
-                speech = 'GENERIC_HOWS_IT_GOING',
-                speechClaim = 'GENERIC_THANKS',
-                speechBye = 'GENERIC_BYE',
-            },
-            params = {
-                props = {
-                    { model = 'prop_rub_binbag_01', coords = vec3(-1465.32, -1204.21, 2.92) },
-                    { model = 'prop_ld_rub_binbag_01', coords = vec3(-1470.54, -1198.83, 2.92) },
-                    { model = 'prop_rub_binbag_01', coords = vec3(-1458.19, -1209.67, 2.92) },
-                    { model = 'prop_ld_rub_binbag_01', coords = vec3(-1475.11, -1195.30, 2.92) },
-                    { model = 'prop_rub_binbag_01', coords = vec3(-1462.78, -1215.42, 2.92) },
-                },
-                itemLabel = 'trash bag',
-            },
-            messages = {
-                pickup = 'You picked up a trash bag.',
-            },
-            reward = {
-                cash = 2500,
-                items = {
-                    { name = 'water', count = 2 },
-                },
-            },
-        },
-        {
-            id = 'delivery_quickdrop',
-            label = 'Express Delivery',
-            description = 'Deliver this package across town before the timer runs out.',
-            type = 'delivery',
-            cooldownSeconds = 10,
-            npc = {
-                id = 'courier_bob',
-                model = 's_m_m_postal_01',
-                coords = vec4(84.57, 110.16, 78.15, 83.6),
-                scenario = 'WORLD_HUMAN_CLIPBOARD',
-                target = { icon = 'fa-solid fa-box', label = 'Talk: Express Delivery' },
-                blip = { sprite = 501, color = 5, scale = 0.7 },
-                speechClaim = 'GENERIC_THANKS',
-                speechBye = 'GENERIC_BYE',
-            },
-            params = {
-                destination = vec3(-537.46, -216.97, 37.65),
-                timeSeconds = 90,
-                prop = 'hei_prop_heist_box',
-                carry = 'both_hands',
-            },
-            reward = {
-                cash = 1500,
-                items = {},
-            },
-        },
-        {
-            id = 'assassination_parksuspect',
-            label = 'Park Pervert',
-            description = "There's some pervert lurking in the park, his name is James Day, If you deal with him I'll make it worth your while.",
-            type = 'assassination',
-            cooldownSeconds = 1000,
-            npc = {
-                id = 'fixer_joe',
-                model = 's_m_y_dealer_01',
-                coords = vec4(-1082.93, -1674.28, 3.70, 0.0),
-                target = { icon = 'fa-solid fa-skull', label = 'Help Stranger' },
-                blip = { sprite = 303, color = 1, scale = 0.7 },
-                speechClaim = 'GENERIC_THANKS',
-                speechBye = 'GENERIC_BYE',
-            },
-            params = {
-                aggressive = false,
-                targets = {
-                    {
-                        model = 'a_m_y_acult_01',
-                        coords = vec4(202.02, -932.53, 30.69, 0.0),
-                        scenario = 'WORLD_HUMAN_STAND_MOBILE',
-                    },
-                },
-                blip = true,
-            },
-            reward = { cash = 3000, items = {} },
-        },
-        {
-            id = 'assassination_gang_melee',
-            label = 'Ambush the Ambushers',
-            description = "Some biker freaks are planning to ambush a shipment we've got coming into the docks. Fuck 'em up!",
-            type = 'assassination',
-            cooldownSeconds = 10,
-            npc = {
-                id = 'gang_informant',
-                model = 'g_m_y_ballaeast_01',
-                coords = vec4(118.33, -1928.17, 19.71, 149.7),
-                scenario = 'WORLD_HUMAN_SMOKING',
-                target = { icon = 'fa-solid fa-user-slash', label = 'Help Stranger' },
-                blip = { sprite = 303, color = 6, scale = 0.7 },
-                speech = 'GENERIC_CHEER',
-                speechClaim = 'GENERIC_CHEER',
-                speechBye = 'GENERIC_BYE',
-            },
-            params = {
-                aggressive = true,
-                targets = {
-                    {
-                        model = 'g_m_y_lost_01',
-                        coords = vec4(1205.67, -3116.23, 5.54, 85.0),
-                        weapon = 'WEAPON_BAT',
-                    },
-                    {
-                        model = 'g_m_y_lost_02',
-                        coords = vec4(1208.42, -3113.78, 5.54, 200.0),
-                    },
-                    {
-                        model = 'g_m_y_lost_03',
-                        coords = vec4(1202.15, -3119.94, 5.54, 15.0),
-                        weapon = 'WEAPON_MACHETE',
-                    },
-                },
-                blip = true,
-            },
-            reward = {
-                cash = 7500,
-                items = {
-                    { name = 'bandage', count = 3 },
-                },
-            },
-        },
+    -- Command / keybind names (change these to avoid conflicts)
+    commands = {
+        missions = 'missions',
+        missionadmin = 'missionadmin',
+    },
+    keybind = 'F6',
+    keybindDescription = 'Toggle Missions Tracker',
+
+    -- Player-facing strings (override to localize)
+    strings = {
+        -- Notifications (Lua)
+        mission_complete_return      = 'You did it! Return to claim your reward.',
+        cooldown_format              = 'On cooldown (%d min)',
+        busy_active                  = 'You already have a mission in progress.',
+        busy_turnin                  = 'You already have a mission ready to turn in.',
+        cancelled                    = 'Mission cancelled.',
+        cancelled_by_player          = 'You cancelled the mission.',
+        delivery_timeout             = 'You ran out of time.',
+        no_permission                = 'You do not have permission.',
+        -- Cleanup
+        cleanup_collected_format     = 'Collected %d/%d %s',
+        cleanup_collected_single     = 'Collected %s',
+        pickup_label                 = 'Pick up',
+        -- HUD text
+        delivery_near                = 'Press [E] to deliver (%s)',
+        delivery_timer               = 'You have %s remaining',
+        placement_hint               = '[E] Place  [Scroll] Rotate  [Backspace] Cancel',
+        -- NUI panel
+        panel_title                  = 'Missions',
+        tab_available                = 'Available',
+        tab_archived                 = 'Archived',
+        filter_placeholder           = 'Filter missions\u{2026}',
+        empty_available              = 'Accept missions to add them here.',
+        empty_filter                 = 'No missions match your filter.',
+        empty_detail                 = 'Select a mission to view details',
+        status_active                = 'in progress',
+        status_complete              = 'complete',
+        status_cooldown              = 'on cooldown',
+        status_cancelled             = 'cancelled',
+        btn_accept                   = 'Accept',
+        btn_reject                   = 'Reject',
+        btn_claim                    = 'Claim Reward',
+        btn_collect                  = 'Collect Reward',
+        btn_cancel                   = 'Cancel',
+        btn_waypoint                 = 'Set Waypoint',
+        btn_admin                    = 'Mission Admin',
+        rewards_label                = 'Rewards',
+        cooldown_comeback            = 'Come back in %s',
+        currency_prefix              = '$',
     },
 }
