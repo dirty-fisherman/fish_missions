@@ -242,7 +242,12 @@ export function MissionEditor({ onSaved, onDeleted }: MissionEditorProps) {
                     { value: 'assassination', label: 'Assassination' },
                   ]}
                   value={editing.type}
-                  onChange={(val) => val && updateEditing({ type: val as any, params: {} })}
+                  onChange={(val) => {
+                    if (!val) return;
+                    const defaults: Record<string, any> = {};
+                    if (val === 'delivery') { defaults.prop = 'hei_prop_heist_box'; defaults.timeSeconds = 60; }
+                    updateEditing({ type: val as any, params: defaults });
+                  }}
                   error={errors.type}
                   allowDeselect={false}
                   comboboxProps={{ withinPortal: false }}

@@ -135,6 +135,7 @@ local function spawnGroupProps(g, mission)
             local obj = CreateObject(joaat(prop.model), coords.x, coords.y, coords.z, false, true, false)
             SetEntityAsMissionEntity(obj, true, true)
             PlaceObjectOnGroundProperly(obj)
+            SetEntityHeading(obj, (prop.heading or 0) + 0.0)
             FreezeEntityPosition(obj, true)
             SetEntityInvincible(obj, true)
             spawned[i] = obj

@@ -10,7 +10,7 @@
       "~/*": ["../../*"],
       "@common/*": ["../src/common/*"]
     },
-    "types": ["@types/node", "./nui.d.ts"],
+    "types": ["./nui.d.ts"],
 
     /* Bundler mode */
     "moduleResolution": "bundler",

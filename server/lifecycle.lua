@@ -108,8 +108,14 @@ AddEventHandler(ResourceName .. ':restore:request', function()
     local src = source
     Server.hydrateActives(src)
 
-    -- Send missions to client (in case this is a /ensure and client needs them)
-    TriggerClientEvent(ResourceName .. ':missions:load', src, Server.missionsList)
+    -- Only send the mission list if the client doesn't already have it.
+    -- During normal login, handleCharacterSelected already sends missions:load;
+    -- sending it again here causes a race condition that spawns duplicate NPC peds.
+    -- This path is still needed for /ensure (resource restart) where no character
+    -- select event fires.
+    if not Server.playerCharacters[src] then
+        TriggerClientEvent(ResourceName .. ':missions:load', src, Server.missionsList)
+    end
 
     local actives = Server.getActivesFor(src)
     for _, a in pairs(actives) do
@@ -123,7 +129,7 @@ AddEventHandler(ResourceName .. ':restore:request', function()
             elseif a.status == 'in-progress' then
                 TriggerClientEvent(ResourceName .. ':mission:start', src, { mission = enc, npcId = a.npcId, progress = a.progress })
             elseif a.status == 'complete' then
-                TriggerClientEvent(ResourceName .. ':mission:return', src, { npcId = a.npcId, missionId = a.missionId })
+                TriggerClientEvent(ResourceName .. ':mission:return', src, { npcId = a.npcId, missionId = a.missionId, silent = true })
             end
         end
     end

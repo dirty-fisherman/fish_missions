@@ -118,15 +118,22 @@ end
 
 -- Proximity polling thread
 local npcProximityActive = false
+local npcProximityGen = 0  -- generation counter to invalidate stale threads
 
 local function startNpcProximityThread()
+    npcProximityGen = npcProximityGen + 1
+    local myGen = npcProximityGen
+
     if npcProximityActive then return end
     npcProximityActive = true
 
     CreateThread(function()
-        while npcProximityActive and next(npcDefs) do
+        while npcProximityActive and myGen == npcProximityGen and next(npcDefs) do
             local playerCoords = GetEntityCoords(cache.ped)
             for npcId, def in pairs(npcDefs) do
+                -- Re-check generation after any yield (spawnNpcPed yields)
+                if myGen ~= npcProximityGen then break end
+
                 local dist = #(playerCoords - vec3(def.x, def.y, def.z))
 
                 if dist < NPC_SPAWN_DIST and not spawnedNpcPeds[npcId] then
@@ -137,7 +144,10 @@ local function startNpcProximityThread()
             end
             Wait(1000)
         end
-        npcProximityActive = false
+        -- Only clear the flag if we're still the current generation
+        if myGen == npcProximityGen then
+            npcProximityActive = false
+        end
     end)
 end
 
@@ -145,6 +155,7 @@ end
 
 function Client.cleanupAllNpcs()
     npcProximityActive = false
+    npcProximityGen = npcProximityGen + 1  -- invalidate any sleeping thread
 
     for npcId in pairs(spawnedNpcPeds) do
         despawnNpcPed(npcId)

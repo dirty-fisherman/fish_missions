@@ -51,8 +51,8 @@ local function spawnTargetPeds(mission)
         loadModel(target.model)
 
         local c = target.coords
-        local heading = (mission.targetHeadings and mission.targetHeadings[i]) or 0.0
-        local ped = CreatePed(4, joaat(target.model), c.x, c.y, c.z, heading, true, true)
+        local heading = ((mission.targetHeadings and mission.targetHeadings[i]) or 0) + 0.0
+        local ped = CreatePed(4, joaat(target.model), c.x + 0.0, c.y + 0.0, c.z + 0.0, heading, true, true)
 
         if DoesEntityExist(ped) then
             SetEntityAsMissionEntity(ped, true, true)

@@ -102,6 +102,8 @@ AddEventHandler('onClientResourceStop', function(resName)
     Client.sendNui('tracker:toggle', { visible = false })
     Client.cleanupAllNpcs()
     Client.stopAllMissions()
+    if Client.cleanupPlacement then Client.cleanupPlacement() end
+    if Client.cleanupPropAdjust then Client.cleanupPropAdjust() end
 end)
 
 -- Clean up missions on character deselect / logout

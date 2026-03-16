@@ -144,13 +144,14 @@ AddEventHandler(ResourceName .. ':mission:return', function(data)
     local t = Client.missionTypes[data.missionId]
     Client.activeMissions[data.missionId] = { npcId = data.npcId, status = 'complete', type = t }
 
-    local mission = Client.findMissionById(data.missionId)
-    local missionTitle = mission and mission.label or 'Mission'
+    if not data.silent then
+        local mission = Client.findMissionById(data.missionId)
+        local missionTitle = mission and mission.label or 'Mission'
+        Client.notify({ title = missionTitle, description = Config.strings.mission_complete_return, type = 'success', duration = 10000 })
 
-    Client.notify({ title = missionTitle, description = Config.strings.mission_complete_return, type = 'success', duration = 10000 })
-
-    if mission and mission.npc and mission.npc.coords then
-        pcall(SetNewWaypoint, mission.npc.coords.x, mission.npc.coords.y)
+        if mission and mission.npc and mission.npc.coords then
+            pcall(SetNewWaypoint, mission.npc.coords.x, mission.npc.coords.y)
+        end
     end
 end)
 

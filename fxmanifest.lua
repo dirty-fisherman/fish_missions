@@ -1,16 +1,14 @@
 name 'fish_missions'
 author 'fish'
-version '1.0.0'
+version '2.0.0'
 fx_version 'cerulean'
 game 'gta5'
 ui_page 'dist/web/index.html'
 
 files {
-	'locales/*.json',
 	'dist/web/assets/index.css',
 	'dist/web/assets/index.js',
 	'dist/web/index.html',
-	'locales/en.json',
 }
 
 dependencies {

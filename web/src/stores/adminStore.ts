@@ -70,7 +70,7 @@ const DEFAULT_MISSION: MissionDefinition = {
     coords: { x: 0, y: 0, z: 0, w: 0 },
     target: { icon: 'fa-solid fa-clipboard', label: 'Help Stranger' },
     blip: {},
-    scenario: 'WORLD_HUMAN_CLIPBOARD',
+    scenario: '',
     speech: 'GENERIC_HI',
     speechClaim: 'GENERIC_THANKS',
     speechBye: 'GENERIC_BYE',

@@ -26,6 +26,8 @@ local function cleanupPlacement()
     placingHeading = 0.0
 end
 
+Client.cleanupPlacement = cleanupPlacement
+
 local function screenToWorld(distance)
     local camRot = GetGameplayCamRot(2)
     local camPos = GetGameplayCamCoord()
@@ -137,7 +139,7 @@ RegisterNUICallback('admin:startPlacement', function(data, cb)
                     local ctxEnt
                     local ctxType = ctx.entityType or 'prop'
                     if ctxType == 'ped' then
-                        ctxEnt = CreatePed(4, ctxHash, ctx.coords.x, ctx.coords.y, ctx.coords.z, ctx.heading or 0.0, false, false)
+                        ctxEnt = CreatePed(4, ctxHash, ctx.coords.x, ctx.coords.y, ctx.coords.z, (ctx.heading or 0) + 0.0, false, false)
                     else
                         ctxEnt = CreateObject(ctxHash, ctx.coords.x, ctx.coords.y, ctx.coords.z, false, false, false)
                     end
@@ -151,7 +153,7 @@ RegisterNUICallback('admin:startPlacement', function(data, cb)
                             PlaceObjectOnGroundProperly(ctxEnt)
                         end
                         if ctx.heading then
-                            SetEntityHeading(ctxEnt, ctx.heading)
+                            SetEntityHeading(ctxEnt, (ctx.heading or 0) + 0.0)
                         end
                         contextHandles[#contextHandles + 1] = ctxEnt
                     end

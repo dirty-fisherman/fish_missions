@@ -21,6 +21,9 @@ RegisterNUICallback('admin:close', function(_, cb)
     adminMode = false
     Client.trackerVisible = false
     SetNuiFocus(false, false)
+    -- Clean up any in-progress placement or prop adjust session
+    if Client.cleanupPlacement then Client.cleanupPlacement() end
+    if Client.cleanupPropAdjust then Client.cleanupPropAdjust() end
     Client.sendNui('admin:closed', {})
     cb({ ok = true })
 end)

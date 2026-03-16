@@ -38,7 +38,7 @@ export function PlacementBanner() {
       const propGroups = [...(editing.params?.propGroups || [])];
       if (propGroups[gi]?.props?.[pi]) {
         const props = [...propGroups[gi].props];
-        props[pi] = { ...props[pi], coords: { x: pos.x, y: pos.y, z: pos.z } };
+        props[pi] = { ...props[pi], coords: { x: pos.x, y: pos.y, z: pos.z }, heading: pos.heading };
         propGroups[gi] = { ...propGroups[gi], props };
         updateParams({ propGroups });
       }
@@ -47,7 +47,7 @@ export function PlacementBanner() {
       const idx = parseInt(pos.field.split('_')[1], 10);
       const props = [...(editing.params?.props || [])];
       if (props[idx]) {
-        props[idx] = { ...props[idx], coords: { x: pos.x, y: pos.y, z: pos.z } };
+        props[idx] = { ...props[idx], coords: { x: pos.x, y: pos.y, z: pos.z }, heading: pos.heading };
         updateParams({ props });
       }
     } else if (pos.field.startsWith('target_')) {
