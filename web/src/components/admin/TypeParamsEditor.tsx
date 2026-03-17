@@ -61,7 +61,7 @@ export function TypeParamsEditor({ errors }: TypeParamsEditorProps) {
   if (editing.type === 'cleanup') {
     const propGroups: Array<{
       label: string;
-      props: Array<{ model: string; coords: { x: number; y: number; z: number }; heading?: number }>;
+      props: Array<{ model: string; coords: { x: number; y: number; z: number }; heading?: number; pitch?: number; roll?: number }>;
       randomize?: boolean;
       randomCount?: number;
     }> = params.propGroups || [];
@@ -195,7 +195,11 @@ export function TypeParamsEditor({ errors }: TypeParamsEditorProps) {
                             <NumberInput label="X" value={prop.coords.x} onChange={(v) => updatePropCoords(gi, pi, { x: round2(Number(v) || 0) })} step={0.01} decimalScale={2} size="xs" />
                             <NumberInput label="Y" value={prop.coords.y} onChange={(v) => updatePropCoords(gi, pi, { y: round2(Number(v) || 0) })} step={0.01} decimalScale={2} size="xs" />
                             <NumberInput label="Z" value={prop.coords.z} onChange={(v) => updatePropCoords(gi, pi, { z: round2(Number(v) || 0) })} step={0.01} decimalScale={2} size="xs" />
-                            <NumberInput label="H" value={prop.heading ?? 0} onChange={(v) => updateProp(gi, pi, { heading: round2(Number(v) || 0) })} step={1} decimalScale={2} size="xs" />
+                          </Group>
+                          <Group grow gap="xs">
+                            <NumberInput label="Heading" value={prop.heading ?? 0} onChange={(v) => updateProp(gi, pi, { heading: round2(Number(v) || 0) })} step={1} decimalScale={2} size="xs" />
+                            <NumberInput label="Pitch" value={prop.pitch ?? 0} onChange={(v) => updateProp(gi, pi, { pitch: round2(Number(v) || 0) })} step={1} decimalScale={2} size="xs" />
+                            <NumberInput label="Roll" value={prop.roll ?? 0} onChange={(v) => updateProp(gi, pi, { roll: round2(Number(v) || 0) })} step={1} decimalScale={2} size="xs" />
                           </Group>
                           <Button
                             size="xs"
@@ -204,7 +208,7 @@ export function TypeParamsEditor({ errors }: TypeParamsEditorProps) {
                             onClick={() => {
                               const ctx = group.props
                                 .filter((_: any, i: number) => i !== pi && hasNonZeroCoords(_.coords))
-                                .map((p: any) => ({ model: p.model, coords: p.coords, heading: p.heading, entityType: 'prop' as const }));
+                                .map((p: any) => ({ model: p.model, coords: p.coords, heading: p.heading, pitch: p.pitch, roll: p.roll, entityType: 'prop' as const }));
                               startPlacement(`gprop_${gi}_${pi}`, prop.model, 'prop', ctx.length ? ctx : undefined);
                             }}
                           >

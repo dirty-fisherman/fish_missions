@@ -3,6 +3,9 @@
 local placingEntity = nil
 local placingField = nil
 local placingHeading = 0.0
+local placingPitch = 0.0
+local placingRoll = 0.0
+local placingRotMode = 1 -- 1 = Yaw, 2 = Pitch, 3 = Roll (prop placement only)
 local placingType = nil -- 'ped' or 'prop'
 local contextHandles = {} -- entities shown for spatial context during placement
 
@@ -24,6 +27,9 @@ local function cleanupPlacement()
     placingField = nil
     placingType = nil
     placingHeading = 0.0
+    placingPitch = 0.0
+    placingRoll = 0.0
+    placingRotMode = 1
 end
 
 Client.cleanupPlacement = cleanupPlacement
@@ -60,6 +66,12 @@ local function doRaycast()
 end
 
 -- ── Placement NUI callback ──────────────────────────────────────────────────
+
+local rotModeNames = { 'Yaw', 'Pitch', 'Roll' }
+local function updatePlacementHint()
+    local modeName = rotModeNames[placingRotMode] or 'Yaw'
+    lib.showTextUI(('[E] Place  [Scroll] %s  [R] Cycle Axis  [Backspace] Cancel'):format(modeName), { position = 'top-center' })
+end
 
 RegisterNUICallback('admin:startPlacement', function(data, cb)
     -- Clean up any existing placement
@@ -99,6 +111,9 @@ RegisterNUICallback('admin:startPlacement', function(data, cb)
 
     local playerPos = GetEntityCoords(cache.ped)
     placingHeading = 0.0
+    placingPitch = 0.0
+    placingRoll = 0.0
+    placingRotMode = 1
     placingField = field
     placingType = entityType
 
@@ -152,9 +167,7 @@ RegisterNUICallback('admin:startPlacement', function(data, cb)
                         else
                             PlaceObjectOnGroundProperly(ctxEnt)
                         end
-                        if ctx.heading then
-                            SetEntityHeading(ctxEnt, (ctx.heading or 0) + 0.0)
-                        end
+                        SetEntityRotation(ctxEnt, (ctx.pitch or 0) + 0.0, (ctx.roll or 0) + 0.0, (ctx.heading or 0) + 0.0, 2, true)
                         contextHandles[#contextHandles + 1] = ctxEnt
                     end
                 end
@@ -162,7 +175,7 @@ RegisterNUICallback('admin:startPlacement', function(data, cb)
         end
     end
 
-    lib.showTextUI(Config.strings.placement_hint, { position = 'top-center' })
+    updatePlacementHint()
 
     cb({ ok = true })
 
@@ -177,19 +190,35 @@ RegisterNUICallback('admin:startPlacement', function(data, cb)
             DisableControlAction(0, 15, true)  -- prev weapon
             DisableControlAction(0, 16, true)  -- select next weapon
             DisableControlAction(0, 17, true)  -- select prev weapon
+            DisableControlAction(0, 45, true)  -- reload (R — cycle rotation axis)
+            DisableControlAction(0, 140, true) -- Disable INPUT_MELEE_ATTACK_LIGHT
 
-            -- Scroll wheel to rotate
-            if IsDisabledControlJustPressed(0, 15) then -- scroll up
-                placingHeading = (placingHeading + 15.0) % 360.0
+            -- R cycles the active rotation axis (prop placement only)
+            if placingType == 'prop' and IsDisabledControlJustPressed(0, 45) then
+                placingRotMode = (placingRotMode % 3) + 1
+                updatePlacementHint()
             end
-            if IsDisabledControlJustPressed(0, 14) then -- scroll down
-                placingHeading = (placingHeading - 15.0 + 360.0) % 360.0
+
+            -- Scroll wheel: adjust active rotation axis
+            local scrollUp   = IsDisabledControlJustPressed(0, 15)
+            local scrollDown = IsDisabledControlJustPressed(0, 14)
+            if scrollUp or scrollDown then
+                local delta = scrollUp and 15.0 or -15.0
+                if placingRotMode == 1 or placingType ~= 'prop' then
+                    placingHeading = (placingHeading + delta + 360.0) % 360.0
+                elseif placingRotMode == 2 then
+                    placingPitch = (placingPitch + delta + 360.0) % 360.0
+                else
+                    placingRoll = (placingRoll + delta + 360.0) % 360.0
+                end
             end
 
             -- E to confirm
             if IsControlJustPressed(0, 38) then
                 local finalCoords = GetEntityCoords(placingEntity)
-                local finalHead = placingHeading
+                local finalHead  = placingHeading
+                local finalPitch = placingPitch
+                local finalRoll  = placingRoll
                 local capturedField = placingField
                 local capturedType = placingType
                 cleanupPlacement()
@@ -200,7 +229,9 @@ RegisterNUICallback('admin:startPlacement', function(data, cb)
                     x = math.floor(finalCoords.x * 100) / 100,
                     y = math.floor(finalCoords.y * 100) / 100,
                     z = math.floor(finalCoords.z * 100) / 100,
-                    heading = math.floor(finalHead * 100) / 100,
+                    heading = math.floor(finalHead  * 100) / 100,
+                    pitch   = math.floor(finalPitch * 100) / 100,
+                    roll    = math.floor(finalRoll  * 100) / 100,
                 })
                 return
             end
@@ -222,7 +253,11 @@ RegisterNUICallback('admin:startPlacement', function(data, cb)
                 -- return stale results when terrain isn't loaded yet.
                 SetEntityCoordsNoOffset(placingEntity, coords.x, coords.y, coords.z, false, false, false)
                 PlaceObjectOnGroundProperly(placingEntity)
-                SetEntityHeading(placingEntity, placingHeading)
+                if placingType == 'prop' then
+                    SetEntityRotation(placingEntity, placingPitch, placingRoll, placingHeading, 2, true)
+                else
+                    SetEntityHeading(placingEntity, placingHeading)
+                end
             end
             -- No trailing Wait(0) needed: doRaycast already yields a frame.
         end
