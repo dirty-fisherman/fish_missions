@@ -9,6 +9,7 @@ local activeZone = nil
 local activeMission = nil
 local monitoring = false
 local pedsSpawned = false
+local inZone = false
 
 local function loadModel(model)
     local hash = type(model) == 'string' and joaat(model) or model
@@ -179,9 +180,10 @@ local function startMonitoring(mission)
                     activeZone = nil
                 end
 
-                TriggerServerEvent(ResourceName .. ':assassination:pedsCleared', mission.id)
+                -- Server broadcast handles notifying other participants and clearing ped data
                 TriggerServerEvent(ResourceName .. ':mission:complete', { missionId = mission.id })
                 activeMission = nil
+                inZone = false
             end
         end
     end)
@@ -222,6 +224,8 @@ local function start(mission)
         radius = radius,
         onEnter = function()
             if not activeMission then return end
+            inZone = true
+            TriggerServerEvent(ResourceName .. ':assassination:enteredZone', activeMission.id)
             if requestAndSpawnPeds(activeMission) then
                 if activeMission.params.aggressive then
                     triggerAggro()
@@ -231,11 +235,17 @@ local function start(mission)
         end,
         onExit = function()
             -- Don't despawn — peds persist for combat and other players
+            inZone = false
+            if activeMission then
+                TriggerServerEvent(ResourceName .. ':assassination:exitedZone', activeMission.id)
+            end
         end,
     })
 
     -- If player is already inside the zone, spawn immediately
     if #(GetEntityCoords(cache.ped) - center) < radius then
+        inZone = true
+        TriggerServerEvent(ResourceName .. ':assassination:enteredZone', mission.id)
         if requestAndSpawnPeds(mission) then
             if mission.params.aggressive then
                 triggerAggro()
@@ -245,8 +255,37 @@ local function start(mission)
     end
 end
 
+-- Handle server broadcast: another player completed the assassination while we're in the zone
+RegisterNetEvent(ResourceName .. ':assassination:allDead')
+AddEventHandler(ResourceName .. ':assassination:allDead', function(data)
+    if not activeMission or activeMission.id ~= data.missionId then return end
+
+    monitoring = false
+
+    Client.RemoveMissionBlips(missionBlips)
+    missionBlips = nil
+
+    if activeZone then
+        activeZone:remove()
+        activeZone = nil
+    end
+
+    activeMission = nil
+    inZone = false
+    pedNetIds = {}
+    pedHandles = {}
+    pedsSpawned = false
+
+    -- Server already marked us complete and will send :mission:return
+end)
+
 local function stop()
     monitoring = false
+
+    -- Notify server to remove us from participants if we were in the zone
+    if inZone and activeMission then
+        TriggerServerEvent(ResourceName .. ':assassination:exitedZone', activeMission.id)
+    end
 
     if activeZone then
         activeZone:remove()
@@ -263,6 +302,7 @@ local function stop()
     pedHandles = {}
     activeMission = nil
     pedsSpawned = false
+    inZone = false
 end
 
 Missions.assassination = {

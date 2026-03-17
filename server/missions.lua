@@ -96,6 +96,11 @@ AddEventHandler(ResourceName .. ':mission:complete', function(data)
 
     Server.dbUpdateStatus(Server.getCharacterId(src), enc.id, 'complete')
     TriggerClientEvent(ResourceName .. ':mission:return', src, { npcId = a.npcId, missionId = a.missionId })
+
+    -- Broadcast completion to all other zone participants for assassination missions
+    if enc.type == 'assassination' and Server.completeAssassinationForParticipants then
+        Server.completeAssassinationForParticipants(enc.id, src)
+    end
 end)
 
 -- ── Claim reward at NPC ─────────────────────────────────────────────────────
