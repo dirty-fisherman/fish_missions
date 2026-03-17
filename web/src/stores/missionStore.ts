@@ -8,7 +8,7 @@ export interface Mission {
   type: 'cleanup' | 'delivery' | 'assassination';
   reward?: {
     cash?: number;
-    items?: Array<{ name: string; count: number }>;
+    items?: Array<{ name: string; count: number; label?: string }>;
   };
 }
 

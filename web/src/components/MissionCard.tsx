@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'react';
-import { Badge, Button, Card, Group, ScrollArea, Stack, Text, Title } from '@mantine/core';
+import { useState, useEffect, Fragment, type ReactNode } from 'react';
+import { Badge, Button, Card, Group, ScrollArea, Stack, Text, Title, Tooltip } from '@mantine/core';
 import { IconMapPin } from './icons';
 import { fetchNui } from '../utils/fetchNui';
 import { formatTimeRemaining, getMissionWaypoint } from '../utils/missionHelpers';
@@ -197,19 +197,71 @@ export function MissionCard({ onClose }: MissionCardProps) {
 
       {/* Rewards + Actions — pinned at bottom */}
       <div style={{ flexShrink: 0, paddingTop: 6 }}>
-        {selectedMission.reward && (
-          <Card bg="rgba(15, 15, 20, 0.6)" radius="sm" p="xs" mb={6}>
-            <Text size="xs" fw={600} c="dimmed" mb={2}>{rewardsLabel}</Text>
-            <Group gap={8}>
-              {!!selectedMission.reward.cash && (
-                <Text size="xs" c="#e0e0e8">{currencyPrefix}{selectedMission.reward.cash.toLocaleString()}</Text>
-              )}
-              {selectedMission.reward.items?.map((it, i) => (
-                <Text size="xs" c="#e0e0e8" key={i}>{it.count}x {it.name}</Text>
-              ))}
-            </Group>
-          </Card>
-        )}
+        {selectedMission.reward && (() => {
+          const reward = selectedMission.reward!;
+          const parts: ReactNode[] = [];
+          if (reward.cash) {
+            parts.push(
+              <Text size="xs" c="#e0e0e8" key="cash">
+                {currencyPrefix}{reward.cash.toLocaleString()}
+              </Text>
+            );
+          }
+          reward.items?.forEach((it, i) => {
+            const imgUrl = `https://cfx-nui-ox_inventory/web/images/${it.name}.png`;
+            const displayLabel = it.label ?? it.name;
+            parts.push(
+              <Tooltip
+                key={`item-${i}`}
+                withinPortal
+                zIndex={9999}
+                label={
+                  <Stack align="center" gap={4} p={2}>
+                    <img
+                      src={imgUrl}
+                      alt={displayLabel}
+                      style={{ width: 64, height: 64, objectFit: 'contain' }}
+                      onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+                    />
+                    <Text size="xs">{displayLabel}</Text>
+                  </Stack>
+                }
+                withArrow
+              >
+                <Group
+                  gap={4}
+                  style={{
+                    cursor: 'default',
+                    background: 'rgba(255,255,255,0.05)',
+                    borderRadius: 4,
+                    padding: '2px 6px',
+                  }}
+                >
+                  <Text size="xs" c="#e0e0e8">{it.count} × </Text>
+                  <img
+                    src={imgUrl}
+                    alt={displayLabel}
+                    style={{ width: 20, height: 20, objectFit: 'contain' }}
+                    onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+                  />
+                </Group>
+              </Tooltip>
+            );
+          });
+          return (
+            <Card bg="rgba(15, 15, 20, 0.6)" radius="sm" p="xs" mb={6}>
+              <Text size="xs" fw={600} c="dimmed" mb={2}>{rewardsLabel}</Text>
+              <Group gap={4} align="center" wrap="wrap">
+                {parts.map((part, i) => (
+                  <Fragment key={i}>
+                    {i > 0 && <Text size="xs" c="dimmed" style={{ marginLeft: -2, marginRight: -2 }}>,</Text>}
+                    {part}
+                  </Fragment>
+                ))}
+              </Group>
+            </Card>
+          );
+        })()}
         {renderActions()}
       </div>
     </Card>

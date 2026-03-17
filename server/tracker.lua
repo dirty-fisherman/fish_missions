@@ -1,7 +1,19 @@
 -- Server-side tracker builder and event handlers
 
 -- ── Tracker builder ─────────────────────────────────────────────────────────
-
+-- Enrich reward items with display labels from ox_inventory
+local function enrichRewardItems(reward)
+    if not reward or not reward.items or #reward.items == 0 then return reward end
+    local enriched = {}
+    for k, v in pairs(reward) do enriched[k] = v end
+    local items = {}
+    for i, it in ipairs(reward.items) do
+        local ok, itemData = pcall(function() return exports['ox_inventory']:Items(it.name) end)
+        items[i] = { name = it.name, count = it.count, label = (ok and itemData and itemData.label) or it.name }
+    end
+    enriched.items = items
+    return enriched
+end
 function Server.buildTrackerStatuses(src)
     local charId = Server.getCharacterId(src)
     local actives = Server.getActivesFor(src)
@@ -50,7 +62,7 @@ function Server.buildTrackerStatuses(src)
             type = enc.type,
             status = status,
             cooldownRemaining = remaining,
-            reward = enc.reward or nil,
+            reward = enc.reward and enrichRewardItems(enc.reward) or nil,
             progress = progress,
         }
     end
@@ -76,7 +88,14 @@ AddEventHandler(ResourceName .. ':tracker:request', function()
     local discoveredMissions = {}
     for _, enc in ipairs(Server.missionsList) do
         if discoveredIds[enc.id] then
-            discoveredMissions[#discoveredMissions + 1] = enc
+            if enc.reward then
+                local copy = {}
+                for k, v in pairs(enc) do copy[k] = v end
+                copy.reward = enrichRewardItems(enc.reward)
+                discoveredMissions[#discoveredMissions + 1] = copy
+            else
+                discoveredMissions[#discoveredMissions + 1] = enc
+            end
         end
     end
 

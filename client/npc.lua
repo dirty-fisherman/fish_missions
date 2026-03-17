@@ -13,7 +13,25 @@ function Client.openMissionNui(npc, enc)
     for k, v in pairs(npc) do npcWithMission[k] = v end
     npcWithMission.missionId = enc.id
 
-    local showPayload = { npc = npcWithMission, mission = enc }
+    -- Enrich reward items with labels from ox_inventory.
+    -- Copy enc shallowly to avoid mutating the shared Client.missionsById entry.
+    local mission = enc
+    if enc.reward and enc.reward.items and #enc.reward.items > 0 then
+        local enrichedItems = {}
+        for i, it in ipairs(enc.reward.items) do
+            local ok, itemData = pcall(function() return exports['ox_inventory']:Items(it.name) end)
+            local lbl = (ok and itemData and itemData.label) or it.name
+            enrichedItems[i] = { name = it.name, count = it.count, label = lbl }
+        end
+        local reward = {}
+        for k, v in pairs(enc.reward) do reward[k] = v end
+        reward.items = enrichedItems
+        mission = {}
+        for k, v in pairs(enc) do mission[k] = v end
+        mission.reward = reward
+    end
+
+    local showPayload = { npc = npcWithMission, mission = mission }
 
     if not Client.nuiReady then
         Client.sendNui('setVisible', { visible = true })
