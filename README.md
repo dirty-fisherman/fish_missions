@@ -1,8 +1,12 @@
 # fish_missions
 
+A mission system for FiveM servers running **ox_core**. Players discover missions by interacting with NPCs in the world, complete objectives (delivery, cleanup, assassination), and claim rewards. Includes a built-in admin tool for creating and editing missions entirely in-game.
+
+**Mission Panel:**
 ![FiveM_b3751_GTAProcess_zEtjDPlZjr](https://github.com/user-attachments/assets/731fe40b-e5ae-4b80-a962-d93c5955e2f7)
 
-A mission system for FiveM servers running **ox_core**. Players discover missions by interacting with NPCs in the world, complete objectives (delivery, cleanup, assassination), and claim rewards. Includes a built-in admin tool for creating and editing missions entirely in-game.
+**Mission Editor:**
+![FiveM_b3751_GTAProcess_tZXo3v4LBc](https://github.com/user-attachments/assets/1a4a160d-9131-40c0-a4e8-9e1cf808ca7e)
 
 ## Dependencies
 
