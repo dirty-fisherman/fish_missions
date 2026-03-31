@@ -10,6 +10,9 @@ local isNearDestination = false
 local activeMission = nil
 local deliveryProp = nil
 
+-- Props created on this client for other players' carry syncing (ped → obj)
+local SyncedDeliveryProps = {}
+
 local function formatTime(seconds)
     local mins = math.floor(seconds / 60)
     local secs = seconds % 60
@@ -46,6 +49,14 @@ local function startCarry(propModel, carry, propOffset, propRotation)
         end
 
         SetModelAsNoLongerNeeded(hash)
+
+        -- Broadcast carry state so other clients can create the prop on our ped
+        LocalPlayer.state:set('fish_missions:carry', {
+            propModel   = propModel,
+            carry       = carry or 'both_hands',
+            propOffset  = propOffset,
+            propRotation = propRotation,
+        }, true)
     end)
 end
 
@@ -60,6 +71,8 @@ local function stopCarry()
         end
         deliveryProp = nil
     end
+    -- Clear statebag so other clients remove the synced prop
+    LocalPlayer.state:set('fish_missions:carry', nil, true)
 end
 
 local function cleanup()
@@ -175,3 +188,83 @@ Missions.delivery = {
     stop = stop,
     setProgress = setProgress,
 }
+
+-- ── Statebag handler: create/remove props on remote players' peds ───────────
+
+AddStateBagChangeHandler('fish_missions:carry', nil, function(bagName, key, value, reserved, replicated)
+    -- `replicated = true` means this is the local player's own state change;
+    -- they already created their prop in startCarry(), so skip.
+    if replicated then return end
+
+    local ply = GetPlayerFromStateBagName(bagName)
+    -- 0 = not a player bag, PlayerId() = our own (extra safety guard)
+    if ply == 0 or ply == PlayerId() then return end
+
+    local ped = GetPlayerPed(ply)
+
+    -- Clean up any previously synced prop for this player
+    if SyncedDeliveryProps[ped] then
+        if DoesEntityExist(SyncedDeliveryProps[ped]) then
+            SetEntityAsMissionEntity(SyncedDeliveryProps[ped], false, false)
+            DeleteEntity(SyncedDeliveryProps[ped])
+        end
+        SyncedDeliveryProps[ped] = nil
+    end
+
+    if type(value) ~= 'table' or not value.propModel then return end
+
+    local preset = CARRY_PRESETS[value.carry or 'both_hands']
+    if not preset then return end
+
+    local pos = value.propOffset   and vec3(value.propOffset.x,   value.propOffset.y,   value.propOffset.z)   or preset.pos
+    local rot = value.propRotation and vec3(value.propRotation.x, value.propRotation.y, value.propRotation.z) or preset.rot
+
+    -- Wait until the ped is streamed in before trying to attach
+    while not DoesEntityExist(ped) do
+        ped = GetPlayerPed(ply)
+        Wait(0)
+    end
+
+    local hash = joaat(value.propModel)
+    lib.requestModel(hash)
+
+    local coords = GetEntityCoords(ped)
+    local obj = CreateObject(hash, coords.x, coords.y, coords.z + 0.2, false, false, false)
+    if obj and obj ~= 0 then
+        AttachEntityToEntity(obj, ped,
+            GetPedBoneIndex(ped, preset.bone),
+            pos.x, pos.y, pos.z,
+            rot.x, rot.y, rot.z,
+            true, true, false, true, 1, true)
+        SyncedDeliveryProps[ped] = obj
+    end
+
+    SetModelAsNoLongerNeeded(hash)
+end)
+
+-- Periodically clean up props whose owning ped has left / streamed out
+CreateThread(function()
+    while true do
+        Wait(1000)
+        for ped, prop in pairs(SyncedDeliveryProps) do
+            if not DoesEntityExist(ped) then
+                if DoesEntityExist(prop) then
+                    SetEntityAsMissionEntity(prop, false, false)
+                    DeleteEntity(prop)
+                end
+                SyncedDeliveryProps[ped] = nil
+            end
+        end
+    end
+end)
+
+AddEventHandler('onClientResourceStop', function(resName)
+    if resName ~= ResourceName then return end
+    for _, prop in pairs(SyncedDeliveryProps) do
+        if DoesEntityExist(prop) then
+            SetEntityAsMissionEntity(prop, false, false)
+            DeleteEntity(prop)
+        end
+    end
+    SyncedDeliveryProps = {}
+end)
