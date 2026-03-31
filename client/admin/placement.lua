@@ -1,5 +1,7 @@
 -- Client-side admin: placement tool (camera raycast with preview entity)
 
+local PED_PREVIEW_Z_OFFSET = 1.0 -- visual-only upward shift so preview peds aren't clipped into the ground
+
 local placingEntity = nil
 local placingField = nil
 local placingHeading = 0.0
@@ -8,6 +10,7 @@ local placingRoll = 0.0
 local placingRotMode = 1 -- 1 = Yaw, 2 = Pitch, 3 = Roll (prop placement only)
 local placingType = nil -- 'ped' or 'prop'
 local contextHandles = {} -- entities shown for spatial context during placement
+local lastGroundCoords = nil -- true ground position for ped previews (before visual Z offset)
 
 -- ── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -30,6 +33,7 @@ local function cleanupPlacement()
     placingPitch = 0.0
     placingRoll = 0.0
     placingRotMode = 1
+    lastGroundCoords = nil
 end
 
 Client.cleanupPlacement = cleanupPlacement
@@ -215,7 +219,8 @@ RegisterNUICallback('admin:startPlacement', function(data, cb)
 
             -- E to confirm
             if IsControlJustPressed(0, 38) then
-                local finalCoords = GetEntityCoords(placingEntity)
+                -- For peds use the stored ground coords (before the visual Z offset)
+                local finalCoords = (placingType == 'ped' and lastGroundCoords) or GetEntityCoords(placingEntity)
                 local finalHead  = placingHeading
                 local finalPitch = placingPitch
                 local finalRoll  = placingRoll
@@ -257,6 +262,13 @@ RegisterNUICallback('admin:startPlacement', function(data, cb)
                     SetEntityRotation(placingEntity, placingPitch, placingRoll, placingHeading, 2, true)
                 else
                     SetEntityHeading(placingEntity, placingHeading)
+                    -- Capture true ground coords, then shift the preview up so the
+                    -- ped isn't visually clipped into the ground. The saved Z from
+                    -- lastGroundCoords is used on E-press, not the offset position.
+                    lastGroundCoords = GetEntityCoords(placingEntity)
+                    SetEntityCoordsNoOffset(placingEntity,
+                        lastGroundCoords.x, lastGroundCoords.y, lastGroundCoords.z + PED_PREVIEW_Z_OFFSET,
+                        false, false, false)
                 end
             end
             -- No trailing Wait(0) needed: doRaycast already yields a frame.
